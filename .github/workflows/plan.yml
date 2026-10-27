@@ -25,6 +25,7 @@ jobs:
           node-version: '24'
       - name: Verify protected scope before requesting AWS credentials
         env:
+          GH_TOKEN: ${{ github.token }}
           SCOPE: ${{ inputs.scope }}
         run: node scripts/github-readiness.mjs plan "$SCOPE"
   plan:

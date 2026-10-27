@@ -24,6 +24,10 @@ jobs:
           node-version: '24'
       - run: terraform fmt -check -recursive
       - run: node --test tests/*.test.mjs
+      - name: Verify governance metadata access with the read-only job token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api graphql -f 'query={repository(owner:"Chico-IA-Empresa",name:"Chico-Infra"){branchProtectionRules(first:100){nodes{pattern isAdminEnforced requiresStatusChecks requiresStrictStatusChecks requiredStatusCheckContexts requiresApprovingReviews requiredApprovingReviewCount allowsForcePushes allowsDeletions}}}}' --jq '.data.repository.branchProtectionRules.nodes | length'
       - run: bash tests/bootstrap.test.sh
       - name: Reuse verified provider packages within this runner
         shell: bash

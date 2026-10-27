@@ -10,7 +10,7 @@ Environments `infra-plan-dev`, `infra-apply-dev`, `infra-plan-shared`, `infra-pl
 
 ## Preflight e dados privados
 
-`github-readiness.mjs` consulta somente metadados públicos da API GitHub, com timeout e falha fechada em erro/rate limit. Não precisa de `GH_GOVERNANCE_READ_TOKEN`. Ele verifica identidade/visibilidade do repositório e as proteções efetivas antes de liberar o job com OIDC.
+`github-readiness.mjs` consulta metadados públicos da API GitHub, com timeout e falha fechada em erro/rate limit. A proteção de branch é lida por GraphQL usando o token padrão somente leitura do job; o endpoint REST correspondente exige Administration:read. Não precisa de `GH_GOVERNANCE_READ_TOKEN`. Ele verifica identidade/visibilidade do repositório e as proteções efetivas antes de liberar o job com OIDC. O CI comprova que o token somente leitura consegue consultar os campos usados no preflight.
 
 Código público não torna planos/state/configuração públicos: os workflows autenticados usam backend e bucket privado de revisão, sem upload de artifacts públicos. `reports/`, arquivos reais de backend/inputs, chaves e `.env` ficam ignorados. PRs executam checks sem credenciais AWS. `DEV_EXECUTION_APPROVED=false` continua vigente; este trabalho não provisiona AWS.
 
