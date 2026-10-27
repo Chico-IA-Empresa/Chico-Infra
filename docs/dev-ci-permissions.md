@@ -31,6 +31,8 @@ Antes de usar: gerar a partir dos metadados reais, validar novamente no Access A
 
 ## Dependência do GitHub
 
+Atualização posterior de 27/10: Felipe tornou o repositório público. O preflight consulta metadados públicos e não precisa mais do token administrativo citado no histórico abaixo. Consulte [governança pública](public-repository-governance.md) para as proteções e revisores configurados. A exigência de revisão protegida permanece.
+
 O workflow autenticado executa `github-readiness.mjs` antes de solicitar OIDC. Ele requer proteção de main com os checks `Infra validation` e `Terraform security`, revisão de PR, bloqueio de force push/deleção e Environments com revisor independente, sem bypass administrativo e com branch única main.
 
 O token de governança `GH_GOVERNANCE_READ_TOKEN` deve ser somente leitura, limitado ao repositório e às APIs de administração/environments usadas no preflight, preferencialmente emitido por GitHub App. O token padrão do Actions não substitui essas permissões. Não inserir token de escrita administrativa ou credenciais AWS permanentes.

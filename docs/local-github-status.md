@@ -1,5 +1,7 @@
 # Preparação local e GitHub — 27/10/2026
 
+> Atualização posterior: Felipe tornou o repositório público. O bloqueio GitHub Free privado descrito abaixo é histórico. A adaptação e as proteções estão registradas em [public-repository-governance.md](public-repository-governance.md). As dependências de recursos AWS continuam pendentes.
+
 Objetivo: fechar os cinco itens levantados na conversa sobre a fase 1. Esta página registra evidência atual e impedimentos; não reduz o objetivo à existência de arquivos e não concede aceite AWS.
 
 | Requisito | Implementação / evidência | Pendência real |
