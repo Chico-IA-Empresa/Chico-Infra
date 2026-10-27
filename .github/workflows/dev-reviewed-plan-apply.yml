@@ -69,7 +69,7 @@ jobs:
           printf '%s' "$TF_VARS_JSON" > envs/dev/ci.auto.tfvars.json
           node scripts/execution-gates.mjs envs/dev/ci.auto.tfvars.json
           node scripts/backend-guard.mjs envs/dev/backend.hcl "$ACCOUNT"
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ inputs.operation == 'plan' && vars.PLAN_ROLE_ARN || vars.APPLY_ROLE_ARN }}
           aws-region: sa-east-1
