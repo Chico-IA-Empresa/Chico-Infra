@@ -7,6 +7,10 @@ mock_provider "aws" {
     defaults = { arn = "arn:aws:s3:::chico-infra-review-synthetic" }
   }
 }
+mock_provider "aws" {
+  alias           = "billing"
+  override_during = plan
+}
 variables {
   account_id                   = "123456789012"
   owner                        = "local-fixture"

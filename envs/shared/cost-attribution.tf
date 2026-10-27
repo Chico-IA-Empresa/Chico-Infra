@@ -8,10 +8,16 @@ variable "environment_cost_tag_evidence_reference" {
   type        = string
   default     = null
 }
+provider "aws" {
+  alias               = "billing"
+  region              = "us-east-1"
+  allowed_account_ids = [var.account_id]
+}
 resource "aws_ce_cost_allocation_tag" "environment" {
-  count   = var.provision_enabled && var.activate_environment_cost_tag ? 1 : 0
-  tag_key = "env"
-  status  = "Active"
+  provider = aws.billing
+  count    = var.provision_enabled && var.activate_environment_cost_tag ? 1 : 0
+  tag_key  = "env"
+  status   = "Active"
   lifecycle {
     prevent_destroy = true
     precondition {
