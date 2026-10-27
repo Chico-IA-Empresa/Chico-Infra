@@ -98,7 +98,7 @@ resource "aws_cloudtrail" "audit" {
   kms_key_id                    = var.kms_key_arn
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.audit.arn}:*"
   cloud_watch_logs_role_arn     = aws_iam_role.delivery.arn
-  sns_topic_name                = aws_sns_topic.audit.arn
+  sns_topic_name                = aws_sns_topic.audit.name
   depends_on                    = [aws_s3_bucket_policy.audit, aws_iam_role_policy.delivery, aws_sns_topic_policy.audit]
   lifecycle { prevent_destroy = true }
 }

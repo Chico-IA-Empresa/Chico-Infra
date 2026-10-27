@@ -16,7 +16,7 @@ variables {
 run "encrypted_audit_delivery" {
   command = plan
   assert {
-    condition     = aws_cloudtrail.audit.cloud_watch_logs_group_arn == "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/shared/audit:*" && aws_cloudtrail.audit.sns_topic_name == "arn:aws:sns:sa-east-1:123456789012:chico-shared-audit-events"
+    condition     = aws_cloudtrail.audit.cloud_watch_logs_group_arn == "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/shared/audit:*" && aws_cloudtrail.audit.sns_topic_name == "chico-shared-audit-events"
     error_message = "Trail deve integrar CloudWatch e SNS explicitamente."
   }
   assert {
