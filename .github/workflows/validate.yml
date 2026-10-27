@@ -79,9 +79,10 @@ jobs:
           for scope in bootstrap shared dev; do
             root="envs/$scope"
             if test "$scope" = bootstrap; then root=bootstrap; fi
+            scan_args=()
+            if test "$scope" = dev; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/dev-scan.tfvars"); fi
             code=0
-            # Static source gate must inspect conditional resources even with execution flags off.
-            checkov -d "$root" --framework terraform --quiet --skip-download --evaluate-variables false -o json > "reports/checkov-$scope-scope.json" || code=$?
+            checkov -d "$root" --framework terraform --quiet --skip-download "${scan_args[@]}" -o json > "reports/checkov-$scope-scope.json" || code=$?
             test "$code" -le 1
             node scripts/security-gate.mjs "reports/checkov-$scope-scope.json" "$scope"
           done
