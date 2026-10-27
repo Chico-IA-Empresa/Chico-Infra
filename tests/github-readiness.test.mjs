@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { validateGithubReadiness } from '../scripts/github-readiness.mjs';
 
 const ready = {
@@ -49,5 +50,31 @@ test('shared/UAT/Prod plan requires its own protected environment', () => {
     context.environments = [{ ...context.environments[0], name: `infra-plan-${scope}` }];
     assert.equal(validateGithubReadiness(context), true);
     assert.throws(() => validateGithubReadiness({ ...context, operation: 'apply' }), /scope/);
+  }
+});
+
+test('explicit single-maintainer exception permits zero main approvals and preserves every other gate', () => {
+  const context = structuredClone(ready);
+  context.mainReviewPolicy = JSON.parse(readFileSync(new URL('../security/main-review-policy.json', import.meta.url), 'utf8'));
+  context.branch.required_pull_request_reviews.required_approving_review_count = 0;
+  assert.equal(validateGithubReadiness(context), true);
+  for (const mutate of [
+    c => { c.branch.required_status_checks.contexts = ['Infra validation']; },
+    c => { c.branch.required_status_checks.strict = false; },
+    c => { c.branch.enforce_admins.enabled = false; },
+    c => { c.branch.allow_force_pushes.enabled = true; },
+    c => { c.branch.allow_deletions.enabled = true; },
+    c => { c.branch.required_pull_request_reviews = null; },
+    c => { c.environments[0].protection_rules[0].prevent_self_review = false; },
+    c => { c.environments[1].can_admins_bypass = true; },
+  ]) { const changed = structuredClone(context); mutate(changed); assert.throws(() => validateGithubReadiness(changed)); }
+});
+
+test('main review exception rejects another repository, scope or undocumented decision', () => {
+  const context = structuredClone(ready);
+  context.mainReviewPolicy = JSON.parse(readFileSync(new URL('../security/main-review-policy.json', import.meta.url), 'utf8'));
+  context.branch.required_pull_request_reviews.required_approving_review_count = 0;
+  for (const change of [{ repository: 'other/repo' }, { scope: 'all-protections' }, { approvedBy: '' }, { approvedOn: '' }, { reason: '' }, { minimumApprovingReviews: -1 }]) {
+    assert.throws(() => validateGithubReadiness({ ...context, mainReviewPolicy: { ...context.mainReviewPolicy, ...change } }));
   }
 });

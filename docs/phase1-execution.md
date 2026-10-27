@@ -2,6 +2,8 @@
 
 Complemento do plano AWS-DEV-EXEC-001 v1.1. Código e testes locais não comprovam apply, restauração ou aceite AWS. Aprovações, finanças, destinatários, inputs, plans e states ficam no registro privado. Aprovação do orçamento não autoriza presumir cobertura tributária ou preencher `all_charges_covered` sem evidência.
 
+O [adendo de governança de 27/10](phase1-governance-addendum.md) registra a decisão posterior de Felipe de retirar a aprovação obrigatória de PR em `main` enquanto há somente um desenvolvedor. A exceção não altera os demais controles de GitHub nem os gates AWS deste runbook.
+
 ## Fundação por dependência
 
 1. Renovar STS, inventário e ownership. Usar sessão segura no executor Terraform; AWS Core não exporta credenciais ao terminal. Respeitar decisões de identidade da sessão aprovada, sem access keys permanentes, segredo em log, bypass GitHub ou criação imperativa substituindo IaC.
