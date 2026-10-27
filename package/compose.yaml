@@ -1,0 +1,139 @@
+name: chico-package-local
+# Business entrypoints are documentation only. The only executable worker
+# service below is the bounded mocked harness; no profile enables real work.
+x-business-topology:
+  odds-bsd: {module: workers.worker_odds_bsd, mode: continuous, enabled: false}
+  odds-surebetting: {module: workers.worker_odds_surebetting, mode: continuous, enabled: false}
+  telegram-update: {module: workers.telegram_update_worker, mode: continuous, enabled: false}
+  sofascore-match-list: {module: workers.sofascore_match_list_worker, mode: dev-loop, enabled: false}
+  sofascore-lineups: {module: workers.sofascore_lineups_worker, mode: dev-loop, enabled: false}
+  sofascore-post-match-stats: {module: workers.sofascore_post_match_statistics_worker, mode: dev-loop, enabled: false}
+  sofascore-standings: {module: workers.sofascore_standings_worker, mode: dev-loop, enabled: false}
+  sofascore-team-stats: {module: workers.sofascore_team_statistics_worker, mode: dev-loop, enabled: false}
+  sofascore-round-matches: {module: workers.sofascore_round_matches_worker, mode: dev-loop, enabled: false}
+  league-reports: {module: workers.worker_league_reports, mode: dev-loop, enabled: false}
+  match-analysis: {module: workers.worker_match_analysis, mode: dev-loop, enabled: false}
+x-process: &process
+  platform: linux/arm64
+  restart: "no"
+  init: true
+  networks: [isolated]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  stop_grace_period: 30s
+  mem_limit: 512m
+  cpus: 1.0
+  logging: {driver: json-file, options: {max-size: 5m, max-file: "2"}}
+x-backend: &backend
+  <<: *process
+  image: ${API_IMAGE:?API_IMAGE required}
+  user: "10001:10001"
+  read_only: true
+  tmpfs: ["/tmp:uid=10001,gid=10001,mode=1770", "/app/logs:uid=10001,gid=10001,mode=0700"]
+services:
+  postgres:
+    <<: *process
+    image: ${POSTGRES_IMAGE:-postgres:16.13-bookworm@sha256:472efd9a66f2b2f1a5aeb18b28de74332e6ef88c2b93a1a5d812fb6db67a5f60}
+    # Official entrypoint needs root just to initialise its NEW PGDATA as postgres.
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE, SETGID, SETUID]
+    environment:
+      POSTGRES_USER: package_bootstrap
+      POSTGRES_DB: chico_package_test
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password, api_password, workers_password, migrator_password, seed_password]
+    volumes:
+      - ${PACKAGE_DATA_ROOT:?isolated data root required}/postgres:/var/lib/postgresql/data
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U package_bootstrap -d chico_package_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    <<: *process
+    image: ${REDIS_IMAGE:-redis:7.4.8-bookworm@sha256:3e0669e42d4fe421c9dea0ba5fbc04d336b80b4f32a6c7d25bee3a1d089288a1}
+    user: "999:999"
+    command: [redis-server, --appendonly, "yes", --save, "60", "1"]
+    volumes: ["${PACKAGE_DATA_ROOT}/redis:/data"]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    <<: *backend
+    environment: {CHICO_CONSUMER: migrator, CHICO_CONFIG_FILE: /run/secrets/config}
+    secrets: [{source: migrator_config, target: config, uid: "10001", gid: "10001", mode: 0400}]
+    command: [python, scripts/package_migrate.py]
+    depends_on: {postgres: {condition: service_healthy}}
+  seed:
+    <<: *backend
+    environment: {CHICO_CONSUMER: seed, CHICO_CONFIG_FILE: /run/secrets/config}
+    secrets: [{source: seed_config, target: config, uid: "10001", gid: "10001", mode: 0400}]
+    command: [python, scripts/package_seed.py]
+    depends_on: {migrate: {condition: service_completed_successfully}}
+  api:
+    <<: *backend
+    environment: {CHICO_CONSUMER: api, CHICO_CONFIG_FILE: /run/secrets/config}
+    secrets: [{source: api_config, target: config, uid: "10001", gid: "10001", mode: 0400}]
+    volumes: ["${PACKAGE_DATA_ROOT}/files:/app/data"]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+  web:
+    <<: *process
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE required}
+    user: "1001:1001"
+    environment:
+      BACKEND_URL: http://api:8000
+      SITE_URL: ${SITE_URL:-http://127.0.0.1:18080}
+      SITE_INDEXABLE: "false"
+    depends_on: {api: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+  proxy:
+    <<: *process
+    # Docker does not publish ports on an internal-only bridge. Only this
+    # credential-free ingress joins the second bridge; app/DB retain isolation.
+    networks: [isolated, ingress]
+    image: ${PROXY_IMAGE:-nginxinc/nginx-unprivileged:1.28.2-alpine@sha256:7377697a821c131a924a7105fafbe7414db4e9fcc77a6f08f776f33f141ec3f8}
+    ports: ["127.0.0.1:${PACKAGE_PORT:-18080}:8080"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${PACKAGE_DATA_ROOT}/tls:/etc/nginx/tls:ro
+    depends_on: {web: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+  workers-harness:
+    <<: *backend
+    image: ${WORKERS_IMAGE:?WORKERS_IMAGE required}
+    profiles: [mock-workers]
+    command: [python, scripts/package_worker_smoke.py]
+    environment: {CHICO_CONSUMER: odds-bsd, CHICO_CONFIG_FILE: /run/secrets/config}
+    secrets: [{source: workers_config, target: config, uid: "10001", gid: "10001", mode: 0400}]
+    depends_on: {seed: {condition: service_completed_successfully}}
+networks:
+  isolated: {internal: true}
+  ingress: {}
+secrets:
+  postgres_password: {file: "${PACKAGE_CONFIG_ROOT:?private config root required}/postgres_password"}
+  api_password: {file: "${PACKAGE_CONFIG_ROOT}/api_password"}
+  workers_password: {file: "${PACKAGE_CONFIG_ROOT}/workers_password"}
+  migrator_password: {file: "${PACKAGE_CONFIG_ROOT}/migrator_password"}
+  seed_password: {file: "${PACKAGE_CONFIG_ROOT}/seed_password"}
+  api_config: {file: "${PACKAGE_CONFIG_ROOT}/api.json"}
+  workers_config: {file: "${PACKAGE_CONFIG_ROOT}/workers.json"}
+  migrator_config: {file: "${PACKAGE_CONFIG_ROOT}/migrator.json"}
+  seed_config: {file: "${PACKAGE_CONFIG_ROOT}/seed.json"}

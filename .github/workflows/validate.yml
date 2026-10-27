@@ -1,0 +1,89 @@
+name: Infra local checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: infra-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    name: Infra validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: terraform fmt -check -recursive
+      - run: node --test tests/*.test.mjs
+      - run: bash tests/bootstrap.test.sh
+      - name: Reuse verified provider packages within this runner
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-providers"
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-providers" >> "$GITHUB_ENV"
+      - name: Validate roots without AWS credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for root in bootstrap envs/shared envs/dev envs/uat envs/prod; do
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$root" validate
+          done
+          terraform -chdir=envs/dev test
+          terraform -chdir=envs/shared test
+          for module in network funding oidc data schedules web-service dev-box budgets audit access-log-sink; do
+            terraform -chdir="modules/$module" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="modules/$module" validate
+            terraform -chdir="modules/$module" test
+          done
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
+        with:
+          tflint_version: v0.59.1
+      - run: tflint --init && tflint --recursive
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: python tests/config-consumer.test.py
+      - run: python tests/proxy-events.test.py
+  security:
+    name: Terraform security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: pip install checkov==3.3.29
+      - name: Gate Dev and required foundation with exact reviewed exceptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          for scope in bootstrap shared dev; do
+            root="envs/$scope"
+            if test "$scope" = bootstrap; then root=bootstrap; fi
+            code=0
+            checkov -d "$root" --framework terraform --quiet --skip-download -o json > "reports/checkov-$scope-scope.json" || code=$?
+            test "$code" -le 1
+            node scripts/security-gate.mjs "reports/checkov-$scope-scope.json" "$scope"
+          done
+      - name: Inventory all blueprints including UAT and Prod
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=0
+          checkov -d . --framework terraform --quiet --skip-download --skip-path reports -o json > reports/checkov-full.json || code=$?
+          test "$code" -le 1
+          node -e 'const r=require("./reports/checkov-full.json");if(!r.summary||r.summary.parsing_errors||r.summary.skipped)process.exit(1);console.log("Full repository inventory (includes future UAT/Prod; operational acceptance remains pending):",r.summary)'

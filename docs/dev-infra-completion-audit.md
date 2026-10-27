@@ -1,0 +1,28 @@
+# Auditoria de conclusão — 23/10/2026
+
+> Auditoria histórica. A autorização de 27/10 inclui preparação local/GitHub e o conector voltou a responder para leituras. Estado atual: [local-github-status.md](local-github-status.md). O aceite operacional AWS segue separado.
+
+**Objetivo integral não cumprido: 0/9 tickets com aceite operacional.** Esta auditoria não reduz o objetivo a arquivos/testes locais. A instrução humana vigente continua “faça tudo localmente”, sem acesso AWS disponível. Não foram feitas novas tentativas autenticadas para contornar essa restrição.
+
+O turno anterior teve progresso: policies SSM e revalidação de créditos foram corrigidas e testadas. A continuação atual também teve progresso local: delivery S3 parametrizado, sanitização/envio proxy, timers independentes e completude de budgets. O mesmo impedimento operacional permanece desde a primeira tentativa AWS e nas duas continuações: falta de acesso e escopo explicitamente restrito ao local. Não há job AWS ou execução remota em andamento para aguardar.
+
+| Contrato | Evidência necessária ao aceite | Estado atual e evidência local | Próxima ação dependente de acesso/decisão |
+|---|---|---|---|
+| R01 ownership/state | Inventário atual reconciliado, backend real, lock concorrente e recuperação de versão isolada | Matriz/runbook e guard de key/conta/região/lock preparados; inventário histórico não prova estado atual | Ler metadados e states na conta; revisar imports; executar ensaio S3 sem sobrescrever state ativo |
+| R02 inputs/outputs/versões | Plan reprodutível da revisão versionada com IDs/ARNs existentes e AMI disponível | Terraform 1.13.5/provider6.69.1 fixados; validações/mocks e outputs preparados; repo ainda sem commit/remote | Publicar revisão confiável em repo próprio e preencher referências após reconciliar fundação |
+| R03 plan/apply/gates | Plan salvo revisado privadamente e mesmo plano aplicado com fundos válidos e aprovação shared | Workflow/binding/versionamento/concorrência e gates de metadata testados; nenhum run GitHub autenticado | Confirmar permissões/proteções GitHub, destino privado e financiamento; revisão específica shared e primeiro executor |
+| R04 IAM/OIDC/SSM | AssumeRole legítimo, negativas reais de origem/scope, PassRole e SSM restritos em recursos existentes | Policies e subjects exatos preparados; removida leitura global de parâmetros do grant SSM; mocks não demonstram IAM real | Inventariar e revisar grants reais; provar caminho permitido/negado e agente online |
+| R05 rede/host | Host ARM64, SSM, portas/Docker/metadata, reboot e bootstrap idempotente | Código/AMI checks/retries/preservação local preparados; bootstrap AL2023 não rodou e daemon Docker local não foi iniciado | Apply revisado em Dev, ensaios no host com fixtures e snapshot/recuperação antes de substituição |
+| R06 ECR/config | Push→scan→pull por digest sob identidades distintas e rotação/negativas sem plaintext | Scripts e allowlists/helpers testados localmente; nenhum push, scan, secret ou CMK real consultado | Reconciliar repos/CMKs; instalar resolver e executar provas sintéticas privadas |
+| R07 durabilidade | Checksum/dados sobrevivem reboot/recriação; pg_dump16 externo restaura isoladamente; timer/falha comprovados | Estratégia root30GiB retido e scripts/timer preparados; storage/log sink referenciados sem prova de existência | Cotar/revisar retenções/destinos e executar backup→restore/substituição real; medir perda/duração |
+| R08 DNS/TLS | Hostname/autoridade aprovados, registro correto, certificado/redirect/renovação/reboot demonstrados | DNS desligado por padrão; Caddy staging/contrato preparados; hostname não definido e nenhum registro alterado | Decisão do hostname e autoridade; import/fronteira de DNS, execução TLS em Dev |
+| R09 sinais/auditoria/custos | Métricas/logs recebidos, falha→alarme recebido, auditoria preservada e budgets/encerramento financiados | Coletores/alarme/Flow Logs/proxy sanitizado e cobertura de budgets preparados; Checkov ainda reprovado; entrega SNS/CloudTrail/Billing não demonstrada | Rever cotação/reserva/thresholds, policies/destinos reais e exceções específicas; executar falha/recuperação e negativas de auditoria |
+| R10 segurança/aceite | Evidência por requisito, negativas reais e plan final sem drift inesperado | Resultados estáticos/mocks e scripts de fixtures disponíveis; nenhuma prova AWS ou plan final real | Executar dependências por ordem, registrar request IDs e revisão, só então marcar DEV-INFRA concluídos |
+
+Recursos Prod/UAT/VPS, backups legados, registros produtivos e cards AWS de origem permanecem fora das alterações operacionais. Nenhuma mensagem manual de alerta foi enviada a destinatários. Nenhum secret real foi lido ou publicado.
+
+## Fronteira do trabalho independente
+
+As pendências operacionais não podem ser resolvidas por aumentar testes mock, inventar ARNs/ownership, aprovar fundos fictícios ou repetir tentativas de conexão contra a instrução local. Criar buckets/CMKs/OIDC/auditoria duplicados antes do inventário também violaria o contrato de reutilização. Policies finais de infra CI e decisões de destino/retention devem derivar do inventário/cotação efetivos, não de grants amplos para desbloquear pipeline.
+
+Para retomar o objetivo integral, são necessários: acesso temporário/federado autorizado à conta correta; cobertura privada atual de créditos/exclusões/reserva; identidade/repositório e proteções GitHub; plan shared especificamente revisado; hostname/autoridade DNS e destinos de auditoria/alerta/logs confirmados. O usuário informou que não consegue autenticar nesta etapa, por isso nenhuma nova solicitação de login foi repetida.

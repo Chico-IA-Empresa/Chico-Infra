@@ -1,0 +1,15 @@
+# Isolated provider mocks only; NOT part of a native/AWS release bundle.
+services:
+  api:
+    networks:
+      isolated:
+        aliases: [backend-fixture]
+  web:
+    environment:
+      BACKEND_URL: ${FIXTURE_BACKEND_URL:-http://api:8000}
+      FIREBASE_PUBLIC_PROJECT_ID: ${FIXTURE_FIREBASE_PROJECT:-fixture-a}
+      NODE_OPTIONS: --require /checks/package-web-provider-mocks.cjs
+      RESEND_API_KEY: re_fixture_not_a_credential
+      CONTACT_EMAIL: capture@example.com
+    volumes:
+      - ../scripts/package-web-provider-mocks.cjs:/checks/package-web-provider-mocks.cjs:ro

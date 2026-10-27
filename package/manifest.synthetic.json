@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "backendSha": "1111111111111111111111111111111111111111",
+  "frontendSha": "2222222222222222222222222222222222222222",
+  "images": {
+    "api": {
+      "reference": "synthetic.invalid/chico-api@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "sourceSha": "1111111111111111111111111111111111111111",
+      "buildId": "synthetic-backend-build",
+      "platform": "linux/arm64",
+      "indexDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "manifestDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "localImageId": null,
+      "checks": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-BUILD",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "scan": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-SCAN",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    },
+    "workers": {
+      "reference": "synthetic.invalid/chico-workers@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "sourceSha": "1111111111111111111111111111111111111111",
+      "buildId": "synthetic-backend-build",
+      "platform": "linux/arm64",
+      "indexDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "localImageId": null,
+      "checks": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-BUILD",
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "scan": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-SCAN",
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    },
+    "frontend": {
+      "reference": "synthetic.invalid/chico-frontend@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "sourceSha": "2222222222222222222222222222222222222222",
+      "buildId": "synthetic-frontend-build",
+      "platform": "linux/arm64",
+      "indexDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "manifestDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "localImageId": null,
+      "checks": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-BUILD",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "scan": {
+        "status": "synthetic",
+        "evidence": "SYNTHETIC-NOT-A-SCAN",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    }
+  },
+  "alembicHeads": [
+    "SYNTHETIC_NOT_OBSERVED"
+  ],
+  "apiContract": "existing-web-unversioned-mobile-pending",
+  "mobile": "pending-no-released-clients",
+  "configuration": [
+    {
+      "name": "DATABASE_URL",
+      "reference": "/chico/dev/api/DATABASE_URL",
+      "version": "synthetic-v1"
+    }
+  ],
+  "bundle": {
+    "version": "dev-package-v1",
+    "files": {
+      "compose.yaml": "sha256:f91729cddb2f0e264f23279c909d5fbd5e4a2bbc678c0d49065f393fdc085b7d",
+      "nginx.conf": "sha256:0036d27e36c4d7ae623002c708a12ade9f532478da4a06181ecf231108a04599",
+      "init-roles.sh": "sha256:2f873221588e942e4633318c510a7fcefdc9ccc6dbe2febcb0fae12729ca4cea",
+      "package_migrate.py": "sha256:f9bef4f4dbbc9a4bdedcee7cbc70219a3f5158bea2b5f8f3c6b6dbd3e231dd0e",
+      "package_seed.py": "sha256:6782e9e52bc51bda137867ef3aa84bd8606af16d34fc4872b348a6e3b4f46673",
+      "configuration-matrix.json": "sha256:abc0e6f88742840e68e89d25a662c1fb5456d66338375ec2f92ea1cd0ab036e6",
+      "manifest.schema.json": "sha256:11b65fbfbdb0ecc8d1b83da7ef36b667c40face30c338b3be8c3eec6462eec80"
+    },
+    "checksum": "sha256:f9438e7ba04d3d9d4288863a9085dca7ad0b9684df869d9cc1e3420d27d317d1"
+  }
+}

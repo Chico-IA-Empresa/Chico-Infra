@@ -1,0 +1,4 @@
+# Fault injection in a disposable local fixture only. Never ship this override.
+services:
+  migrate:
+    command: [python, -c, "raise SystemExit(42)"]

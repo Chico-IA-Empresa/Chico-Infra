@@ -1,5 +1,22 @@
 # chico-infra
 
+## Estado atual — 27/10/2026
+
+Repositório privado: [Chico-IA-Empresa/Chico-Infra](https://github.com/Chico-IA-Empresa/Chico-Infra). O commit inicial `256c664` contém o README; a implementação foi reunida no branch `codex/dev-infra-local-github` para revisão e checks no GitHub.
+
+O trabalho autorizado nesta rodada é fechar preparação local e GitHub. Não houve apply, criação de recursos, alteração de DNS ou início de workloads AWS. Leituras de metadados reconfirmaram a conta e a ausência das dependências necessárias; validação estática IAM não equivale a prova operacional.
+
+- [Fechamento e requisitos pendentes](docs/local-github-status.md)
+- [Permissões CI e boundaries](docs/dev-ci-permissions.md)
+- [Revisão das exceções específicas de segurança](docs/security-exceptions-review.md)
+- [Contrato técnico da fase — cópia para consulta no GitHub](docs/contracts/dev-infra-prd.md)
+
+Checks sem credenciais: fmt/validate, testes Terraform mock, Node/Python/Bash, TFLint e Checkov com gate explícito para bootstrap/shared/Dev. Scans brutos não são suprimidos; exceções locais expiram e ficam vinculadas ao hash do código. Actions são fixadas por commit SHA. Plans/state, relatórios privados e arquivos reais de backend/inputs não entram no Git.
+
+Felipe decidiu manter GitHub Free. A API recusou proteção de branch no repositório privado. O preflight bloqueia OIDC antes de solicitar credenciais quando faltam proteções; `DEV_EXECUTION_APPROVED=false`. Este bloqueio está registrado, sem contratação de plano ou mudança de visibilidade. Referências reais ausentes na AWS continuam pendentes, sem ARNs fictícios.
+
+**As seções abaixo são histórico de 18–26/10 e não descrevem o estado atual de commit, remote, Docker ou GitHub.** Use os documentos de fechamento acima para a situação vigente.
+
 ## DEV-PACOTE — implementação local de 23/10/2026
 
 Pacote em `package/`: Compose isolado, contratos de configuração/volumes, bootstrap SQL da fixture, schema/manifesto sintético e ferramenta de build OCI local. Backend/frontend recebem os deltas de runtime correspondentes. [Estado por ticket](docs/dev-package-status.md) · [runbook](docs/dev-package-runbook.md). Docker Desktop indisponível impede concluir as provas em containers; validação offline não é aceite ARM64/AWS. Nenhum recurso AWS ou card original foi alterado.
