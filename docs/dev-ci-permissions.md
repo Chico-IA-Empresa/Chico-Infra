@@ -23,7 +23,7 @@ As boundaries ficam em `/chico/shared/`; o apply Dev não pode alterá-las. A ro
 
 Em 27/10/2026, 166 nomes exatos de ações foram conferidos na [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/service-reference.html). Candidatos com inventário de fixture foram submetidos a `AccessAnalyzer.ValidatePolicy`; referências redundantes e um operador de condição booleano foram corrigidos. A validação final está registrada no relatório de fechamento local.
 
-Os testes verificam segregação de state, mutações proibidas, exigência de boundaries, divisão sem perda de statements e rejeição de wildcards/contas/chaves indevidas. Isto não prova autorização efetiva. IDs de fixture não podem ser usados para provisionar nem provar isolamento de Prod.
+Os testes verificam segregação de state, mutações proibidas, exigência de boundaries, divisão sem perda de statements e rejeição de wildcards/contas/chaves indevidas. A validação final dos seis documentos retornou zero findings; seis simulações confirmaram os resultados esperados do modelo. [Evidência e limitações](evidence/iam-policy-validation-2026-10-27.json). Isto não prova autorização efetiva. IDs de fixture não podem ser usados para provisionar nem provar isolamento de Prod.
 
 Antes de usar: gerar a partir dos metadados reais, validar novamente no Access Analyzer e provar plan/apply/PassRole positivos e negativos sob as roles reais. Acesso a CloudWatch/Secrets exige também key policies efetivas revisadas. State e plans ficam privados.
 

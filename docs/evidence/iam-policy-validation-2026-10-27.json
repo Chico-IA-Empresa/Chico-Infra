@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-27",
+  "sourceCommit": "e9a31b4458df33b72121f605bd9ab22623c28b94",
+  "scope": "policy model with synthetic inventory; not deployed role authorization",
+  "awsMutations": false,
+  "serviceReference": {
+    "verifiedExactActionNames": 166,
+    "source": "https://servicereference.us-east-1.amazonaws.com/v1/"
+  },
+  "accessAnalyzer": {
+    "operation": "ValidatePolicy",
+    "policyType": "IDENTITY_POLICY",
+    "documents": ["plan", "apply-0", "apply-1", "apply-2", "runtime-boundary", "flow-boundary"],
+    "successfulApiCalls": 6,
+    "finalFindings": 0
+  },
+  "simulation": {
+    "operation": "SimulateCustomPolicy",
+    "successfulApiCalls": 6,
+    "decisions": {
+      "dev-network": "allowed",
+      "prod-network": "implicitDeny",
+      "prod-state": "implicitDeny",
+      "change-boundary": "implicitDeny",
+      "unbounded-inline": "implicitDeny",
+      "bounded-inline": "allowed"
+    }
+  },
+  "limitations": [
+    "Inventory is synthetic and must never be used for apply.",
+    "Simulation contexts were supplied explicitly; they do not establish actual resource ownership.",
+    "Resource policies, SCPs, trust, role attachments and actual service behavior require live proofs under temporary roles.",
+    "Missing AWS dependencies and GitHub protections remain explicit blockers."
+  ]
+}

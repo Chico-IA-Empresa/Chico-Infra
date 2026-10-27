@@ -15,12 +15,18 @@ jobs:
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.13.5
+          terraform_wrapper: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - run: terraform fmt -check -recursive
       - run: node --test tests/*.test.mjs
       - run: bash tests/bootstrap.test.sh
+      - name: Reuse verified provider packages within this runner
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-providers"
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-providers" >> "$GITHUB_ENV"
       - name: Validate roots without AWS credentials
         shell: bash
         run: |
