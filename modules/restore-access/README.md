@@ -1,0 +1,13 @@
+# Temporary restore access
+
+This component is inactive unless explicitly enabled by a reviewed staging root. No existing bootstrap/shared/Dev root calls it. It does not create a host, store a passphrase, restore a database, change the legacy bucket, or authorize an apply by being present in the repository.
+
+The private pinned selection is processed by `scripts/restore-source-permissions.mjs`. Every selected key receives its own `s3:GetObjectVersion` statement with its own VersionId. It rejects current/null versions, duplicates, wildcard/traversal keys, incomplete selection metadata and policy quota overflow. The resulting nine policy parts for the current 178-object selection use nine managed-policy attachments, leaving the support permissions inline. The boundary is a ceiling, and never grants access on its own.
+
+The role/profile is separate from permanent Dev runtime and CI. Its boundary and inline denies prohibit source mutation and current-version reads, and prohibit all S3 access to source/destination before or after a fixed window of at most 48 hours. Expiry does not terminate the instance or delete data; cleanup still requires an approved plan. SSM access remains available for diagnosis/cleanup. No IAM administration, arbitrary SSM dispatch or S3 deletion is granted.
+
+Destination reads are restricted to the owned Dev database-backup prefix, for independent recovery. Writes are restricted to one `dev/database/import/IMPORT_ID/` conversion prefix. Transfer manifests must bind exact S3 versions/checksums and use the validated destination encryption. Source TLS is mandatory. No credentials, plaintext metadata or database rows belong in Terraform variables, plan/state, SSM command payloads, public logs or evidence responses.
+
+Before activation: reconcile role/profile/policy ownership and attachment quotas, bind the exact private source manifest hash and key/VersionId pairs to the staging plan, renew funding and lease validity, validate actual policies, and review the entire staging plan including the host, disk, networking and private cipher-transfer procedure. The initial Shared CI plan pending human review is independent and must not be replaced by this module's validation-only plan. The host still needs 160 GiB gp3 / t3.medium Standard within the approved 48-hour cap, no ingress, compatible architecture/PG/pgBackRest, controlled egress, secret-safe provisioning and empty directories. No compute is enabled here.
+
+Mock tests establish configuration invariants. They do not prove effective temporary credentials, S3 authorization, transfer integrity, compatibility, restoration or cleanup. Actual positive/negative access tests and expiry/removal evidence remain mandatory.
