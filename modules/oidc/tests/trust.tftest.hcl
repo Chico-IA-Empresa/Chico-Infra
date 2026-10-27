@@ -32,3 +32,30 @@ run "exact_subject_and_scope" {
     error_message = "State e lock devem ficar apenas no scope UAT."
   }
 }
+run "build_and_deploy_have_no_state_grant" {
+  command = plan
+  variables {
+    bindings = {
+      ci-build-dev  = { scope = "dev", repository = "test-only/application", environment = "build-dev", writable_state = false, state_access = false }
+      ci-deploy-dev = { scope = "dev", repository = "test-only/application", environment = "deploy-dev", writable_state = false, state_access = false }
+    }
+  }
+  assert {
+    condition     = length(aws_iam_role.ci) == 2 && length(aws_iam_role_policy.state) == 0
+    error_message = "Build/deploy devem existir sem receber leitura, escrita ou lock do state."
+  }
+}
+run "reject_writable_state_without_state_access" {
+  command = plan
+  variables {
+    bindings = { ci-build-dev = { scope = "dev", repository = "test-only/application", environment = "build-dev", writable_state = true, state_access = false } }
+  }
+  expect_failures = [var.bindings]
+}
+run "reject_implicit_build_state_access" {
+  command = plan
+  variables {
+    bindings = { ci-build-dev = { scope = "dev", repository = "test-only/application", environment = "build-dev", writable_state = false } }
+  }
+  expect_failures = [var.bindings]
+}

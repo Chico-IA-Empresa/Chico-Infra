@@ -4,13 +4,13 @@
     "check": "CKV2_AWS_62",
     "resource": "module.access_logs.aws_s3_bucket.this",
     "reason": "Notificação de cada objeto S3 não é requisito do PRD; não adicionar eventos/consumidores pagos por inferência.",
-    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "bootstrap",
@@ -43,26 +43,26 @@
     "check": "CKV_AWS_18",
     "resource": "module.access_logs.aws_s3_bucket.this",
     "reason": "Recurso é o destino exclusivo de access logs; logar no próprio destino gera recursão e amplificação.",
-    "compensatingControl": "Buckets de origem têm aws_s3_bucket_logging; sink privado/versionado/SSE-S3, origem e conta fixas na policy e retenção explícita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "Buckets de origem têm aws_s3_bucket_logging; sink privado/versionado/SSE-S3, origem e conta fixas na policy e retenção explícita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "bootstrap",
     "check": "CKV_AWS_145",
     "resource": "module.access_logs.aws_s3_bucket.this",
     "reason": "State segue SSE-S3 por contrato; backup e destinos de access logs também usam SSE-S3, satisfazendo criptografia em repouso.",
-    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "bootstrap",
@@ -82,13 +82,13 @@
     "check": "CKV_AWS_144",
     "resource": "module.access_logs.aws_s3_bucket.this",
     "reason": "Baseline aprovado usa uma conta/região sa-east-1; replicação entre regiões não foi contratada.",
-    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "bootstrap",
@@ -121,52 +121,52 @@
     "check": "CKV_AWS_136",
     "resource": "module.registry.aws_ecr_repository.this[\"chico-workers\"]",
     "reason": "ECR usa AES256 em repouso; CMK para registry não é exigência do PRD R06.",
-    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos.",
+    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos. Revisão fase 1: limpeza untagged passa a opt-in; AES256, imutabilidade e scan básico preservados; nenhum digest é excluído por default.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/registry/main.tf",
-    "sourceSha256": "20689cab64c22b3274660f653fbb5dbb4ddf810fff43c01a878b3610f4f83a5e"
+    "sourceSha256": "1cfa09d08a66f6a08050e1f408f17f15ff8d3194cd0c3f87a597497571f67f10"
   },
   {
     "scope": "shared",
     "check": "CKV_AWS_136",
     "resource": "module.registry.aws_ecr_repository.this[\"chico-frontend\"]",
     "reason": "ECR usa AES256 em repouso; CMK para registry não é exigência do PRD R06.",
-    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos.",
+    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos. Revisão fase 1: limpeza untagged passa a opt-in; AES256, imutabilidade e scan básico preservados; nenhum digest é excluído por default.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/registry/main.tf",
-    "sourceSha256": "20689cab64c22b3274660f653fbb5dbb4ddf810fff43c01a878b3610f4f83a5e"
+    "sourceSha256": "1cfa09d08a66f6a08050e1f408f17f15ff8d3194cd0c3f87a597497571f67f10"
   },
   {
     "scope": "shared",
     "check": "CKV_AWS_136",
     "resource": "module.registry.aws_ecr_repository.this[\"chico-api\"]",
     "reason": "ECR usa AES256 em repouso; CMK para registry não é exigência do PRD R06.",
-    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos.",
+    "compensatingControl": "Tags imutáveis, imagens por digest, scan obrigatório no fluxo e pull limitado aos três repos. Revisão fase 1: limpeza untagged passa a opt-in; AES256, imutabilidade e scan básico preservados; nenhum digest é excluído por default.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/registry/main.tf",
-    "sourceSha256": "20689cab64c22b3274660f653fbb5dbb4ddf810fff43c01a878b3610f4f83a5e"
+    "sourceSha256": "1cfa09d08a66f6a08050e1f408f17f15ff8d3194cd0c3f87a597497571f67f10"
   },
   {
     "scope": "shared",
     "check": "CKV2_AWS_62",
     "resource": "module.audit_access_logs.aws_s3_bucket.this",
     "reason": "Notificação de cada objeto S3 não é requisito do PRD; não adicionar eventos/consumidores pagos por inferência.",
-    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "shared",
@@ -186,13 +186,13 @@
     "check": "CKV_AWS_144",
     "resource": "module.audit_access_logs.aws_s3_bucket.this",
     "reason": "Baseline aprovado usa uma conta/região sa-east-1; replicação entre regiões não foi contratada.",
-    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "shared",
@@ -212,13 +212,13 @@
     "check": "CKV_AWS_18",
     "resource": "module.audit_access_logs.aws_s3_bucket.this",
     "reason": "Recurso é o destino exclusivo de access logs; logar no próprio destino gera recursão e amplificação.",
-    "compensatingControl": "Buckets de origem têm aws_s3_bucket_logging; sink privado/versionado/SSE-S3, origem e conta fixas na policy e retenção explícita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "Buckets de origem têm aws_s3_bucket_logging; sink privado/versionado/SSE-S3, origem e conta fixas na policy e retenção explícita. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "shared",
@@ -238,13 +238,13 @@
     "check": "CKV_AWS_145",
     "resource": "module.audit_access_logs.aws_s3_bucket.this",
     "reason": "State segue SSE-S3 por contrato; backup e destinos de access logs também usam SSE-S3, satisfazendo criptografia em repouso.",
-    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem.",
+    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Output do destino depende de policy, ownership, PAB e criptografia antes de habilitar logging na origem. Revisão fase 1: nome explícito rejeita origem legada/null; delivery_prefix validado cobre policy e lifecycle; TLS/PAB/SSE-S3/versionamento/retention e dependências preservados.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/access-log-sink/main.tf",
-    "sourceSha256": "57642295923079f9b18fca6894aa6cbc23bc1b082b6f2a34babf776faa93b9e3"
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   },
   {
     "scope": "dev",
@@ -264,13 +264,13 @@
     "check": "CKV_AWS_126",
     "resource": "module.dev_box.aws_instance.this",
     "reason": "Dev usa métricas EC2 padrão de cinco minutos; detailed monitoring pago não integra o baseline.",
-    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos.",
+    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos. Revisão fase 1: CPU Standard evita excedentes; volume parametrizado 30–80 GiB mantém criptografia/retenção/IMDSv2 e coleta padrão de métricas.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/dev-box/main.tf",
-    "sourceSha256": "6a2fc328f5094cec86467d7bfeeec140b41f178db0e6d7c199ef92f59689abd3"
+    "sourceSha256": "f27b7a649e5c898c79e32c66314da36724ec3b52d5dca9b784debdb078a34816"
   },
   {
     "scope": "dev",
@@ -303,13 +303,13 @@
     "check": "CKV2_AWS_62",
     "resource": "aws_s3_bucket.backup",
     "reason": "Notificação de cada objeto S3 não é requisito do PRD; não adicionar eventos/consumidores pagos por inferência.",
-    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita.",
+    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "d061d3eba6f10813973c504e1b09911fe72f517e4f4db64292326cbb83d18476"
+    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
   },
   {
     "scope": "dev",
@@ -342,25 +342,155 @@
     "check": "CKV_AWS_144",
     "resource": "aws_s3_bucket.backup",
     "reason": "Baseline aprovado usa uma conta/região sa-east-1; replicação entre regiões não foi contratada.",
-    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional.",
+    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "d061d3eba6f10813973c504e1b09911fe72f517e4f4db64292326cbb83d18476"
+    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
   },
   {
     "scope": "dev",
     "check": "CKV_AWS_145",
     "resource": "aws_s3_bucket.backup",
     "reason": "State segue SSE-S3 por contrato; backup e destinos de access logs também usam SSE-S3, satisfazendo criptografia em repouso.",
-    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK.",
+    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "d061d3eba6f10813973c504e1b09911fe72f517e4f4db64292326cbb83d18476"
+    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
+  },
+  {
+    "scope": "shared",
+    "resource": "aws_s3_bucket.review",
+    "sourceFile": "envs/shared/review-storage.tf",
+    "check": "CKV2_AWS_62",
+    "reason": "Notificação de cada objeto não integra o contrato desta fase; não criar consumidores/eventos por inferência.",
+    "compensatingControl": "Planos possuem versões exatas e binding de hash/commit com validade 24h; sinks têm origem/conta/prefixo exatos. Entrega efetiva permanece gate AWS.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "d0c066333b7a04e05609194f019216b170d4b8d63742ff2d18054878660e8ba4"
+  },
+  {
+    "scope": "shared",
+    "resource": "aws_s3_bucket.review",
+    "sourceFile": "envs/shared/review-storage.tf",
+    "check": "CKV_AWS_144",
+    "reason": "Uma conta/região sa-east-1 é o contrato aprovado; replicação inter-regional não está autorizada nem cotada.",
+    "compensatingControl": "Versionamento, proteção de destruição e cópias/recuperação isoladas na mesma região; prova operacional ainda pendente.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "d0c066333b7a04e05609194f019216b170d4b8d63742ff2d18054878660e8ba4"
+  },
+  {
+    "scope": "shared",
+    "resource": "aws_s3_bucket.review",
+    "sourceFile": "envs/shared/review-storage.tf",
+    "check": "CKV_AWS_145",
+    "reason": "SSE-S3 é o contrato do bundle AES256 do workflow e dos sinks compatíveis com server access logging.",
+    "compensatingControl": "AES256, TLS, PAB, ownership e versionamento explícitos; runtime sem acesso aos planos/sinks. CloudWatch/Secrets/SNS/auditoria continuam com CMKs separadas.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "d0c066333b7a04e05609194f019216b170d4b8d63742ff2d18054878660e8ba4"
+  },
+  {
+    "scope": "shared",
+    "resource": "module.review_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV2_AWS_62",
+    "reason": "Notificação de cada objeto não integra o contrato desta fase; não criar consumidores/eventos por inferência.",
+    "compensatingControl": "Planos possuem versões exatas e binding de hash/commit com validade 24h; sinks têm origem/conta/prefixo exatos. Entrega efetiva permanece gate AWS.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "shared",
+    "resource": "module.review_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV_AWS_144",
+    "reason": "Uma conta/região sa-east-1 é o contrato aprovado; replicação inter-regional não está autorizada nem cotada.",
+    "compensatingControl": "Versionamento, proteção de destruição e cópias/recuperação isoladas na mesma região; prova operacional ainda pendente.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "shared",
+    "resource": "module.review_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV_AWS_145",
+    "reason": "SSE-S3 é o contrato do bundle AES256 do workflow e dos sinks compatíveis com server access logging.",
+    "compensatingControl": "AES256, TLS, PAB, ownership e versionamento explícitos; runtime sem acesso aos planos/sinks. CloudWatch/Secrets/SNS/auditoria continuam com CMKs separadas.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "dev",
+    "resource": "module.backup_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV2_AWS_62",
+    "reason": "Notificação de cada objeto não integra o contrato desta fase; não criar consumidores/eventos por inferência.",
+    "compensatingControl": "Planos possuem versões exatas e binding de hash/commit com validade 24h; sinks têm origem/conta/prefixo exatos. Entrega efetiva permanece gate AWS.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "dev",
+    "resource": "module.backup_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV_AWS_144",
+    "reason": "Uma conta/região sa-east-1 é o contrato aprovado; replicação inter-regional não está autorizada nem cotada.",
+    "compensatingControl": "Versionamento, proteção de destruição e cópias/recuperação isoladas na mesma região; prova operacional ainda pendente.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "dev",
+    "resource": "module.backup_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV_AWS_145",
+    "reason": "SSE-S3 é o contrato do bundle AES256 do workflow e dos sinks compatíveis com server access logging.",
+    "compensatingControl": "AES256, TLS, PAB, ownership e versionamento explícitos; runtime sem acesso aos planos/sinks. CloudWatch/Secrets/SNS/auditoria continuam com CMKs separadas.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "scope": "dev",
+    "resource": "module.backup_access_logs.aws_s3_bucket.this",
+    "sourceFile": "modules/access-log-sink/main.tf",
+    "check": "CKV_AWS_18",
+    "reason": "Sink de access logs não deve gerar logs sobre si mesmo, evitando recursão e amplificação de custo.",
+    "compensatingControl": "Somente origem/conta/prefixo de backup Dev autorizados; fonte tem logging e destino depende de policy/criptografia/PAB antes de ser usado.",
+    "reference": "docs/phase1-execution.md; docs/security-exceptions-review.md; docs/contracts/dev-infra-prd.md R01/R05/R06/R09",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
   }
 ]

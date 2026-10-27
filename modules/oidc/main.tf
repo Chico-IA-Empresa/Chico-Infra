@@ -2,10 +2,14 @@ variable "provider_arn" { type = string }
 variable "state_bucket_arn" { type = string }
 variable "bindings" {
   description = "Exact GitHub Environment subject per role. Permissions beyond state are granted only after ARN inventory review."
-  type        = map(object({ scope = string, repository = string, environment = string, writable_state = bool }))
+  type        = map(object({ scope = string, repository = string, environment = string, writable_state = bool, state_access = optional(bool, true) }))
   validation {
-    condition     = alltrue([for b in values(var.bindings) : contains(["shared", "dev", "uat", "prod"], b.scope) && can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", b.repository)) && can(regex("^[a-z0-9-]+$", b.environment))])
+    condition     = alltrue([for b in values(var.bindings) : contains(["shared", "dev", "uat", "prod"], b.scope) && can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", b.repository)) && can(regex("^[a-z0-9-]+$", b.environment)) && (!b.writable_state || b.state_access)])
     error_message = "Use scope válido e repo/environment exatos, sem wildcard."
+  }
+  validation {
+    condition     = alltrue([for name, binding in var.bindings : !binding.state_access || contains(["ci-plan-${binding.scope}", "ci-infra-apply-${binding.scope}"], name)])
+    error_message = "Somente ci-plan-SCOPE/ci-infra-apply-SCOPE recebem state; build/deploy devem declarar state_access=false."
   }
 }
 variable "verified_subjects" {
@@ -30,7 +34,7 @@ resource "aws_iam_role" "ci" {
   }] })
 }
 resource "aws_iam_role_policy" "state" {
-  for_each = var.bindings
+  for_each = { for name, binding in var.bindings : name => binding if binding.state_access }
   role     = aws_iam_role.ci[each.key].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = var.state_bucket_arn,

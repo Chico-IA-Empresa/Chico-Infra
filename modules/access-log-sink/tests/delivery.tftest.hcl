@@ -31,3 +31,21 @@ run "reject_implicit_retention" {
   variables { retention_days = 0 }
   expect_failures = [var.retention_days]
 }
+run "dev_backup_prefix_matches_delivery_and_retention" {
+  command = plan
+  variables { delivery_prefix = "dev/backup-access/" }
+  assert {
+    condition     = jsondecode(aws_s3_bucket_policy.this.policy).Statement[0].Resource == "arn:aws:s3:::synthetic-access-log-sink/dev/backup-access/*" && one([for r in aws_s3_bucket_lifecycle_configuration.this.rule : r if r.id == "access-logs"]).filter[0].prefix == "dev/backup-access/"
+    error_message = "Permissão e lifecycle devem cobrir o prefixo que o Dev realmente entrega."
+  }
+}
+run "reject_wildcard_delivery_prefix" {
+  command = plan
+  variables { delivery_prefix = "dev/*/" }
+  expect_failures = [var.delivery_prefix]
+}
+run "reject_unresolved_sink_name" {
+  command = plan
+  variables { bucket_name = null }
+  expect_failures = [var.bucket_name]
+}

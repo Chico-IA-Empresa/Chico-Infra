@@ -2,7 +2,9 @@
 
 O gate desta fase cobre `bootstrap`, `envs/shared` e `envs/dev`, incluindo os módulos locais referenciados. O scanner completo do repositório continua executado para inventariar também os blueprints UAT/Prod. O aceite destes ambientes permanece fora da fase Dev.
 
-Não há supressões Checkov, baseline automático nem soft-fail global. O scan bruto continua registrando as falhas. `security/dev-exceptions.json` contém 28 decisões específicas por scope, check e recurso, revisadas tecnicamente nesta implementação, subordinadas ao PRD. Esta revisão não representa aprovação humana de um plan nem aceite operacional AWS.
+Não há supressões Checkov, baseline automático nem soft-fail global. O scan bruto continua registrando as falhas. `security/dev-exceptions.json` contém 38 decisões específicas por scope, check e recurso, revisadas tecnicamente nesta implementação, subordinadas ao PRD. Esta revisão não representa aprovação humana de um plan nem aceite operacional AWS.
+
+Na preparação da fase 1, dez decisões foram acrescentadas para review storage e os sinks próprios de planos/backup Dev: SSE-S3 compatível com o workflow/log delivery, ausência de replicação inter-regional não contratada, ausência de notificação por objeto não requerida e ausência de logging recursivo no sink Dev. Cada entrada identifica seu recurso/hash; não há exceção global. Os quatro arquivos alterados com decisões anteriores foram revistos individualmente: validação/prefixo do sink, CPU Standard/capacidade do host, limpeza ECR opt-in e prefixo/retention do banco real. Grants de backup não dão acesso à origem legada. CMKs/policies de serviço e entrega real ainda exigem revisão do plan e prova AWS.
 
 Cada decisão inclui justificativa, controle compensatório, referência, revisor técnico, revisão em 27/10/2026, expiração em 25/01/2027 e hash SHA256 do arquivo de origem (texto normalizado para LF). Mudança no código coberto, achado novo, supressão no scanner, parsing incompleto, entrada duplicada, decisão obsoleta ou vencida bloqueia o gate. Revisões posteriores devem reavaliar a decisão; não atualizar o hash automaticamente para obter verde.
 

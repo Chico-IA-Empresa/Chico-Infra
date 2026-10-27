@@ -15,6 +15,15 @@ variable "fixture_backup_retention_days" {
     error_message = "Retenção inteira positiva cotada/revisada obrigatória."
   }
 }
+variable "database_backup_retention_days" {
+  description = "Real restored database retention; independent of fixtures and legacy source. Phase 1 approved 14 days."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.database_backup_retention_days == null ? true : var.database_backup_retention_days == 14
+    error_message = "Retenção real aprovada nesta fase: 14 dias; outra política exige revisão."
+  }
+}
 resource "aws_s3_bucket" "backup" {
   count         = local.host_enabled ? 1 : 0
   bucket        = var.backup_bucket_name
@@ -70,15 +79,30 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
     noncurrent_version_expiration { noncurrent_days = var.fixture_backup_retention_days }
     abort_incomplete_multipart_upload { days_after_initiation = 1 }
   }
+  dynamic "rule" {
+    for_each = var.database_backup_retention_days == null ? [] : [var.database_backup_retention_days]
+    content {
+      id     = "dev-database"
+      status = "Enabled"
+      filter { prefix = "dev/database/" }
+      expiration { days = rule.value }
+      noncurrent_version_expiration { noncurrent_days = rule.value }
+      abort_incomplete_multipart_upload { days_after_initiation = 1 }
+    }
+  }
 }
+locals { backup_prefixes = var.database_backup_retention_days == null ? ["dev/fixtures/*"] : ["dev/fixtures/*", "dev/database/*"] }
 resource "aws_iam_role_policy" "backup" {
   count = local.host_enabled ? 1 : 0
   role  = aws_iam_role.runtime[0].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
-    { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.backup[0].arn, Condition = { StringLike = { "s3:prefix" = ["dev/fixtures/*"] } } },
-    { Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject"], Resource = "${aws_s3_bucket.backup[0].arn}/dev/fixtures/*" }
+    { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.backup[0].arn, Condition = { StringLike = { "s3:prefix" = local.backup_prefixes } } },
+    { Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"], Resource = [for prefix in local.backup_prefixes : "${aws_s3_bucket.backup[0].arn}/${prefix}"] }
   ] })
 }
 output "backup" {
   value = local.host_enabled ? { bucket = aws_s3_bucket.backup[0].id, prefix = "dev/fixtures/", retention_days = var.fixture_backup_retention_days, retained_after_shutdown = true } : null
+}
+output "database_backup" {
+  value = local.host_enabled && var.database_backup_retention_days != null ? { bucket = aws_s3_bucket.backup[0].id, prefix = "dev/database/", retention_days = var.database_backup_retention_days, source_access = "none; separate temporary restore identity required" } : null
 }

@@ -1,6 +1,6 @@
 # Permissões de infraestrutura Dev
 
-`scripts/dev-infra-permissions.mjs` gera candidatos privados para plan, apply e duas permissions boundaries. Não cria nem anexa policies na AWS. A entrada deve conter conta, buckets state/revisão/backup reconciliados, AMI, CMKs reais e IDs do VPC Dev/default SG confirmados no inventário.
+`scripts/dev-infra-permissions.mjs` gera candidatos privados para plan, apply e duas permissions boundaries. Não cria nem anexa policies na AWS. A entrada deve conter conta, buckets state/revisão/backup/sink (`accessLogBucket`) reconciliados, AMI, CMKs reais e IDs do VPC Dev/default SG confirmados no inventário. O sink é distinto da origem e gerenciado pela root Dev; runtime não recebe acesso aos seus objetos nem ao bucket legado. Ver [ondas da fase 1](phase1-execution.md).
 
 ```powershell
 node scripts/dev-infra-permissions.mjs reports/private/dev-inventory.json reports/private/dev-policies
@@ -15,7 +15,7 @@ Sequência sem circularidade: após bootstrap/shared necessários e revisão fin
 
 - `plan.json`: descoberta regional de metadados, leitura somente do state Dev, escrita do lock Dev e upload do bundle privado. Não lê valores de Secrets Manager nem escreve infraestrutura.
 - `apply.json`: leitura anterior, escrita do state Dev, leitura da versão aprovada do plano e mutações limitadas aos recursos Dev. Não concede mutação das próprias roles CI, criação/alteração de managed policies ou remoção de boundaries. PassRole limita runtime→EC2 e flow→VPC Flow Logs.
-- `runtimeBoundary.json`: teto de permissões do host para canais SSM, pull dos três ECR, logs/métricas Dev, prefixo de backup sintético e configuração Dev. Não concede state ou administração IAM. As policies inline continuam mais estreitas por consumidor.
+- `runtimeBoundary.json`: teto de permissões do host para canais SSM, pull dos três ECR, logs/métricas Dev, backups `dev/fixtures/` e `dev/database/`, e configuração Dev. Não concede exclusão de objetos, leitura da origem legada, state ou administração IAM. A policy inline só habilita o prefixo real quando sua retenção foi configurada.
 - `flowBoundary.json`: teto exclusivo de delivery nos streams de `/chico/dev/flow`, além de descoberta regional de grupos.
 - `shared-policy-inputs.json`: documentos para o input `dev_ci_policy_documents` da root shared. O apply é dividido em três managed policies nos testes atuais, respeitando a quota de 6.144 caracteres. Revisar os documentos gerados para o inventário final antes de aplicar shared.
 

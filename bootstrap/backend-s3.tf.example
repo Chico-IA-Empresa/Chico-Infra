@@ -1,0 +1,6 @@
+# Copy privately to backend.tf only after local bootstrap apply and bucket validation.
+# Check the destination key is unoccupied, then init -migrate-state with backend.hcl.
+# Never use -force-copy or overwrite an unreconciled remote state.
+terraform {
+  backend "s3" {}
+}

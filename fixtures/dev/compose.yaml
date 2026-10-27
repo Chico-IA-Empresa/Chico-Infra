@@ -30,11 +30,21 @@ services:
     image: ${CADDY_IMAGE:?pinned Caddy ARM64 digest required}
     profiles: [tls]
     environment:
-      DEV_HOSTNAME: ${DEV_HOSTNAME:?approved Dev hostname required}
+      DEV_HOSTNAME: ${DEV_HOSTNAME:-}
       ACME_DIRECTORY: ${ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
     ports: ['80:80', '443:443']
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/chico/tls:/data
+      - proxy_config:/config
+    networks: [isolated, edge]
+    restart: unless-stopped
+  proxy-local:
+    image: ${CADDY_IMAGE:?pinned Caddy ARM64 digest required}
+    profiles: [local]
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
       - /srv/chico/tls:/data
       - proxy_config:/config
     networks: [isolated, edge]

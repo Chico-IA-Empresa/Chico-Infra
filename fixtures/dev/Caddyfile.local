@@ -1,0 +1,19 @@
+{
+  # Infrastructure proof before external DNS; no public certificate is requested.
+  auto_https disable_redirects
+}
+http://:80 {
+  log {
+    output file /data/access.log
+    format json
+  }
+  reverse_proxy static:8080
+}
+https://localhost:443 {
+  tls internal
+  log {
+    output file /data/access.log
+    format json
+  }
+  reverse_proxy static:8080
+}
