@@ -8,6 +8,8 @@ Na preparação da fase 1, dez decisões foram acrescentadas para review storage
 
 Cada decisão inclui justificativa, controle compensatório, referência, revisor técnico, revisão em 27/10/2026, expiração em 25/01/2027 e hash SHA256 do arquivo de origem (texto normalizado para LF). Mudança no código coberto, achado novo, supressão no scanner, parsing incompleto, entrada duplicada, decisão obsoleta ou vencida bloqueia o gate. Revisões posteriores devem reavaliar a decisão; não atualizar o hash automaticamente para obter verde.
 
+Checkov 3.3.29 apresenta alguns recursos condicionais Dev pelo endereço do bloco fonte ou pela instância expandida. Nove decisões identificam também `sourceResource` exato do mesmo bloco raiz; nenhum wildcard é aceito. O hash da fonte continua obrigatório e os quatro grupos de logs têm a mesma fonte/controles. Um relatório expandido parcial, instância nova, bloco diferente ou fontes conflitantes continua bloqueado. Os achados brutos não são filtrados; a correspondência admite somente essas formas de endereço explicitamente revisadas. A ordem de hash Python é fixada em local/CI para reprodutibilidade, sem desabilitar checks ou expansão do scanner.
+
 | Controle | Decisão e verificação |
 |---|---|
 | CKV_AWS_338 | Logs mantêm 30 dias do PRD R09. Criptografia e retenção constam do código; comprovação de entrega e cotação continuam na AWS. |

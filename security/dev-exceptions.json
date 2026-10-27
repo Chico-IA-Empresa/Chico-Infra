@@ -257,7 +257,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/observability.tf",
-    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332"
+    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332",
+    "sourceResource": "aws_cloudwatch_log_group.dev"
   },
   {
     "scope": "dev",
@@ -270,7 +271,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/observability.tf",
-    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332"
+    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332",
+    "sourceResource": "aws_cloudwatch_log_group.dev"
   },
   {
     "scope": "dev",
@@ -283,7 +285,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/observability.tf",
-    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332"
+    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332",
+    "sourceResource": "aws_cloudwatch_log_group.dev"
   },
   {
     "scope": "dev",
@@ -296,7 +299,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/observability.tf",
-    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332"
+    "sourceSha256": "c56afafc48479c89ae732be87a15558f35dfd936f413eea8d71580ca91ff4332",
+    "sourceResource": "aws_cloudwatch_log_group.dev"
   },
   {
     "scope": "dev",
@@ -348,7 +352,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2",
+    "sourceResource": "aws_s3_bucket.backup"
   },
   {
     "scope": "dev",
@@ -387,7 +392,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2",
+    "sourceResource": "aws_s3_bucket.backup"
   },
   {
     "scope": "dev",
@@ -400,7 +406,8 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2",
+    "sourceResource": "aws_s3_bucket.backup"
   },
   {
     "scope": "shared",
@@ -543,7 +550,8 @@
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
-    "sourceSha256": "1c1126fdf4e3738dade63b830755e0c6bf5f70687267bfb93e2c4fcd5b90a169"
+    "sourceSha256": "1c1126fdf4e3738dade63b830755e0c6bf5f70687267bfb93e2c4fcd5b90a169",
+    "sourceResource": "aws_cloudwatch_log_group.flow"
   },
   {
     "check": "CKV_AWS_112",
@@ -556,6 +564,7 @@
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
-    "sourceSha256": "027a6edd11f3a32aa5ce5518d1c1a19d7f1e025ca6625a4be1ee598f217cc44e"
+    "sourceSha256": "027a6edd11f3a32aa5ce5518d1c1a19d7f1e025ca6625a4be1ee598f217cc44e",
+    "sourceResource": "aws_ssm_document.session"
   }
 ]

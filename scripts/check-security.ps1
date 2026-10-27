@@ -1,8 +1,10 @@
 param([string]$Python, [string]$CheckovScript)
 $ErrorActionPreference = 'Stop'
 $taskBase = Split-Path -Parent $PSScriptRoot
+$taskOriginalHashSeed = $env:PYTHONHASHSEED
 Push-Location $taskBase
 try {
+  $env:PYTHONHASHSEED = '0'
   foreach ($taskScope in @('bootstrap', 'shared', 'dev')) {
     $taskDirectory = if ($taskScope -eq 'bootstrap') { 'bootstrap' } else { "envs/$taskScope" }
     $taskReport = "reports/checkov-$taskScope-scope.json"
@@ -13,4 +15,8 @@ try {
     node scripts/security-gate.mjs $taskReport $taskScope
     if ($LASTEXITCODE -ne 0) { throw "Security review failed in $taskScope" }
   }
-} finally { Pop-Location }
+} finally {
+  if ([string]::IsNullOrEmpty($taskOriginalHashSeed)) { Remove-Item -LiteralPath Env:PYTHONHASHSEED -ErrorAction SilentlyContinue }
+  else { $env:PYTHONHASHSEED = $taskOriginalHashSeed }
+  Pop-Location
+}

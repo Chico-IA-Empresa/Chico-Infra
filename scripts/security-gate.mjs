@@ -20,6 +20,9 @@ export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
   }
   const scoped = exceptions.filter(e => e.scope === scope);
   const signatures = new Set();
+  const reviewedAddresses = new Set();
+  const sourceOwners = new Map();
+  const acceptedSignatures = new Map();
   for (const entry of scoped) {
     const signature = `${entry.check}:${entry.resource}`;
     if (signatures.has(signature) || !entry.reason?.trim() || !entry.compensatingControl?.trim() ||
@@ -29,11 +32,27 @@ export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
       throw new Error(`Invalid, duplicate or expired exception: ${signature}`);
     }
     signatures.add(signature);
+    const accepted = [signature];
+    if (entry.sourceResource !== undefined) {
+      // Checkov may emit an unexpanded root block or its count/for_each instance.
+      // Only an explicitly reviewed source address of this exact block is valid.
+      const source = entry.sourceResource;
+      if (!/^aws_[a-z0-9_]+\.[a-zA-Z0-9_]+$/.test(source) || !entry.resource.startsWith(source) ||
+          !/^\[(?:[0-9]+|"[a-zA-Z0-9_-]+")\]$/.test(entry.resource.slice(source.length)) ||
+          !entry.sourceFile?.startsWith(`envs/${scope}/`)) throw new Error('Invalid reviewed source address');
+      const sourceSignature = `${entry.check}:${source}`;
+      const owner = `${entry.sourceFile}:${entry.sourceSha256}`;
+      if (sourceOwners.has(sourceSignature) && sourceOwners.get(sourceSignature) !== owner) throw new Error('Source address has conflicting owners');
+      sourceOwners.set(sourceSignature, owner);
+      accepted.push(sourceSignature);
+    }
+    acceptedSignatures.set(signature, accepted);
+    accepted.forEach(value => reviewedAddresses.add(value));
   }
   const failures = report.results.failed_checks;
-  const unreviewed = failures.filter(f => !signatures.has(`${f.check_id}:${f.resource}`));
+  const unreviewed = failures.filter(f => !reviewedAddresses.has(`${f.check_id}:${f.resource}`));
   const actual = new Set(failures.map(f => `${f.check_id}:${f.resource}`));
-  const obsolete = scoped.filter(e => !actual.has(`${e.check}:${e.resource}`));
+  const obsolete = scoped.filter(e => !acceptedSignatures.get(`${e.check}:${e.resource}`).some(value => actual.has(value)));
   if (unreviewed.length || obsolete.length) throw new Error(JSON.stringify({ unreviewed: unreviewed.map(f => `${f.check_id}:${f.resource}`), obsolete: obsolete.map(e => `${e.check}:${e.resource}`) }));
   return { scope, passed: report.summary.passed, rawFindings: failures.length, reviewedExceptions: scoped.length, skipped: 0, operationalAcceptance: false };
 }

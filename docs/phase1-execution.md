@@ -17,6 +17,8 @@ O [adendo de governança de 27/10](phase1-governance-addendum.md) registra a dec
 
 `foundation_enabled=false` mantém o caminho anterior de chave externa reconciliada. Não alternar ownership de chaves existentes sem plan de migração: a proteção de destruição deve bloquear perda acidental. As flags shared são independentes dos grants que dependem de IDs do VPC.
 
+Budgets por ambiente usam o cost allocation tag `env`. Antes de declarar esses filtros funcionais, consultar a disponibilidade/status reais no Cost Explorer. A ativação pertence a shared em `aws_ce_cost_allocation_tag.environment`, com opt-in desligado por padrão e referência de evidência privada obrigatória. Não habilitar enquanto a AWS não disponibilizar o tag. O budget account não depende desse filtro; configuração de budgets não comprova atribuição de custo nem alerta recebido. Reconciliar atraso dos dados e retenções antes do aceite.
+
 ## Recuperação da cópia pgBackRest
 
 Descoberta não é seleção ou prova de cadeia íntegra. O bucket legado permanece fora das roots de administração de storage. Runtime Dev nunca recebe leitura da origem; `dev/database/` e `dev/fixtures/` pertencem apenas ao bucket novo.

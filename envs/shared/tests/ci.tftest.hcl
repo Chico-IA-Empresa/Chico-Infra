@@ -7,6 +7,10 @@ mock_provider "aws" {
     defaults = { arn = "arn:aws:s3:::chico-infra-review-synthetic" }
   }
 }
+mock_provider "aws" {
+  alias           = "billing"
+  override_during = plan
+}
 variables {
   account_id                   = "123456789012"
   owner                        = "local-fixture"
@@ -91,5 +95,38 @@ run "initial_shared_foundation_without_vpc_grants" {
   assert {
     condition     = length(aws_sns_topic_subscription.dev_operations) == 1 && jsondecode(aws_sns_topic_policy.dev_operations[0].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == local.dev_alarm_arns
     error_message = "Alertas exigem destino definido e publicação limitada aos alarmes Dev autorizados."
+  }
+}
+run "cost_tag_cannot_bypass_provision_gate" {
+  command = plan
+  variables {
+    activate_environment_cost_tag           = true
+    environment_cost_tag_evidence_reference = "synthetic-mock-only"
+  }
+  assert {
+    condition     = length(aws_ce_cost_allocation_tag.environment) == 0
+    error_message = "Opt-in de cost allocation não pode ignorar provision_enabled."
+  }
+}
+run "cost_tag_requires_reviewed_evidence" {
+  command = plan
+  variables {
+    provision_enabled             = true
+    activate_environment_cost_tag = true
+    credit_approval               = { account_id = "123456789012", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+  }
+  expect_failures = [aws_ce_cost_allocation_tag.environment[0]]
+}
+run "cost_tag_activation_is_scoped_and_explicit" {
+  command = plan
+  variables {
+    provision_enabled                       = true
+    activate_environment_cost_tag           = true
+    environment_cost_tag_evidence_reference = "synthetic-mock-only"
+    credit_approval                         = { account_id = "123456789012", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+  }
+  assert {
+    condition     = aws_ce_cost_allocation_tag.environment[0].tag_key == "env" && aws_ce_cost_allocation_tag.environment[0].status == "Active"
+    error_message = "Shared ativa somente env após opt-in/evidência; nenhum outro tag ou cobrança é alterado."
   }
 }
