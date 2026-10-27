@@ -11,6 +11,8 @@ O primeiro executor humano temporário estabelece/reconcilia o VPC Dev e o SG de
 
 ## Documentos gerados
 
+Sequência sem circularidade: após bootstrap/shared necessários e revisão financeira, o primeiro executor pode aplicar a root Dev com `provision_enabled=true` e `compute_enabled=false`, mantendo configuração de negócio vazia. Isso estabelece a rede e seu SG default sem host/roles runtime. Com os IDs reconciliados e CMKs/buckets efetivos, gerar os candidatos, revisar shared para boundaries/grants, e somente então habilitar compute no plan Dev seguinte. Não usar `-target` nem conceder administração ampla para contornar essa dependência.
+
 - `plan.json`: descoberta regional de metadados, leitura somente do state Dev, escrita do lock Dev e upload do bundle privado. Não lê valores de Secrets Manager nem escreve infraestrutura.
 - `apply.json`: leitura anterior, escrita do state Dev, leitura da versão aprovada do plano e mutações limitadas aos recursos Dev. Não concede mutação das próprias roles CI, criação/alteração de managed policies ou remoção de boundaries. PassRole limita runtime→EC2 e flow→VPC Flow Logs.
 - `runtimeBoundary.json`: teto de permissões do host para canais SSM, pull dos três ECR, logs/métricas Dev, prefixo de backup sintético e configuração Dev. Não concede state ou administração IAM. As policies inline continuam mais estreitas por consumidor.

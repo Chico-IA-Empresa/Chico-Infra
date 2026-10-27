@@ -68,4 +68,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 }
 # This destination is deliberately not logged into itself: recursive log delivery
 # amplifies requests/storage. It accepts only its explicit source and TLS.
-output "bucket_name" { value = aws_s3_bucket.this.id }
+output "bucket_name" {
+  value = aws_s3_bucket.this.id
+  depends_on = [
+    aws_s3_bucket_policy.this,
+    aws_s3_bucket_ownership_controls.this,
+    aws_s3_bucket_public_access_block.this,
+    aws_s3_bucket_server_side_encryption_configuration.this
+  ]
+}

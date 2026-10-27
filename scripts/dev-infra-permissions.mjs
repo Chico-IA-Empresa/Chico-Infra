@@ -11,6 +11,8 @@ const owned = { StringEquals: { 'aws:ResourceTag/project': 'chicoai', 'aws:Resou
 const creating = { StringEquals: { 'aws:RequestTag/project': 'chicoai', 'aws:RequestTag/env': 'dev', 'aws:RequestedRegion': 'sa-east-1' } };
 
 export function devInfraPolicies(i) {
+  const fields = ['account', 'stateBucket', 'reviewBucket', 'backupBucket', 'amiId', 'kmsKeyArns', 'vpcId', 'defaultSecurityGroupId'];
+  if (!i || typeof i !== 'object' || Array.isArray(i) || Object.keys(i).some(key => !fields.includes(key))) throw new Error('Only reviewed metadata fields are accepted');
   const exact = (value, pattern, name) => { if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`Invalid ${name}`); return value; };
   const account = exact(i.account, /^[0-9]{12}$/, 'account');
   const bucket = (name, prefix) => exact(name, new RegExp(`^${prefix}[a-z0-9-]{3,45}$`), 'bucket');
@@ -20,6 +22,7 @@ export function devInfraPolicies(i) {
   const ami = exact(i.amiId, /^ami-[a-f0-9]{17}$/, 'AMI');
   if (!Array.isArray(i.kmsKeyArns) || !i.kmsKeyArns.length) throw new Error('Reviewed KMS keys required');
   i.kmsKeyArns.forEach(arn => exact(arn, new RegExp(`^arn:aws:kms:sa-east-1:${account}:key/[a-f0-9-]{36}$`), 'KMS key'));
+  if (new Set(i.kmsKeyArns).size !== i.kmsKeyArns.length) throw new Error('Duplicate KMS key');
   // The first human executor establishes the VPC. Exact IDs are required for
   // implicit resources (default SG, primary ENI), which cannot carry request tags.
   const vpc = exact(i.vpcId, /^vpc-[a-f0-9]{17}$/, 'reconciled Dev VPC');
@@ -100,6 +103,9 @@ export function devInfraPolicies(i) {
     allow('LogGroupDiscovery', ['logs:DescribeLogGroups'], '*', region),
   ]);
   const apply = document([...reads, ...writes]);
+  for (const policy of [plan, runtimeBoundary, flowBoundary]) {
+    if (JSON.stringify(policy).length > 6144) throw new Error('IAM managed policy quota exceeded; reduce/review inventory');
+  }
   // Customer-managed IAM policies have a 6,144-character quota. Split on
   // statement boundaries; each part is independently valid and reviewable.
   const applyParts = [];
@@ -109,6 +115,7 @@ export function devInfraPolicies(i) {
       last = document([]); applyParts.push(last);
     }
     last.Statement.push(statement);
+    if (JSON.stringify(last).length > 6144) throw new Error('Single statement exceeds IAM managed policy quota');
   }
   return { plan, apply, applyParts, runtimeBoundary, flowBoundary, boundaryArns: boundaries, repositoryArns: repos };
 }

@@ -4,11 +4,11 @@ Objetivo: fechar os cinco itens levantados na conversa sobre a fase 1. Esta pág
 
 | Requisito | Implementação / evidência | Pendência real |
 |---|---|---|
-| Revisão de segurança local | Correções state/auditoria, teste de delivery, gate bootstrap/shared/Dev e 28 exceções específicas com controles, validade e hash. Scanner completo preservado. | Revalidar os resultados no runner GitHub da revisão publicada. Aceite operacional e segurança de UAT/Prod permanecem etapas próprias. |
+| Revisão de segurança local | Correções state/auditoria, teste de delivery, gate bootstrap/shared/Dev e 28 exceções específicas com controles, validade e hash. Scanner completo preservado. Gate também aprovado no runner GitHub. | Aceite operacional e segurança de UAT/Prod permanecem etapas próprias; os checks sempre devem ser lidos na revisão corrente. |
 | Permissões de plan/apply | Gerador de candidatos a partir de inventário, managed policies divididas por quota, ligação shared→roles CI e boundaries exigidas pela root Dev. Nomes de ações verificados na AWS; Access Analyzer usado com fixture. | Regerar/validar com VPC/SG/CMKs/buckets reais após primeiro executor e provar autorização sob roles reais. |
 | Configuração real | Conta `306915830875` e AZ `sa-east-1a` verificadas em leitura; owner Felipe e cost-center Chico-IA. Inputs locais privados mantêm provisionamento/compute desligados e aprovação financeira ausente. | Backend state/review não existem; CMKs, SNS, ECR, VPC/SG Dev, retenções cotadas, hostname/DNS e cobertura atual ainda dependem da fase AWS. Sem UUIDs/ARNs inventados. |
 | GitHub | Remote privado próprio, branch de preparação, workflows sem credenciais, Actions fixadas por SHA, allowlist de fornecedores, token padrão somente leitura e aprovação de PR pelo Actions desabilitada. Variáveis de conta e `DEV_EXECUTION_APPROVED=false` conferidas. | Proteção de branch e Environments exigidos indisponíveis no GitHub Free privado. Felipe decidiu manter Free e registrar o bloqueio. OIDC não está habilitado para contornar esta limitação. |
-| Documentação e checks finais | README e runbook atualizados; relatórios históricos identificados; contrato espelhado para consulta no GitHub; testes independentes do checkout backend; gitattributes LF e exclusão de dados privados. | Publicação/CI devem ser comprovados antes de declarar a revisão pronta. |
+| Documentação e checks finais | README e runbook atualizados; relatórios históricos identificados; contrato espelhado para consulta no GitHub; testes independentes do checkout backend; gitattributes LF e exclusão de dados privados. Publicação e primeira rodada Linux aprovadas no PR #1. | Verificar os checks do commit corrente antes de integrar mudanças posteriores. |
 
 ## Inventário AWS observado nesta rodada
 
@@ -46,6 +46,10 @@ bash tests/bootstrap.test.sh
 Usar Terraform 1.13.5, provider AWS 6.69.1, TFLint 0.59.1 e Checkov 3.3.29. Os arquivos de lock entram no Git. `reports/` fica fora do histórico; saídas privadas não devem ser coladas em PRs.
 
 O workflow `Infra local checks` reproduz as verificações em Ubuntu. Os checks nomeados para futura proteção são `Infra validation` e `Terraform security`.
+
+Publicação: [PR #1](https://github.com/Chico-IA-Empresa/Chico-Infra/pull/1). O [run 40519551797](https://github.com/Chico-IA-Empresa/Chico-Infra/actions/runs/40519551797) aprovou ambos os jobs no commit `ff0a88c`, incluindo correção dos hashes oficiais Linux/Windows do provider. A revisão posterior acrescenta validação de quota/inputs e ordenação do destino de logs; acompanhar os [checks correntes](https://github.com/Chico-IA-Empresa/Chico-Infra/actions/workflows/validate.yml).
+
+Verificações locais acumuladas: 36 runs Terraform mock em roots/módulos, 52 testes Node, seis testes Python, Bash e TFLint. O checkout isolado comprovou independência dos testes de manifesto em relação aos diretórios irmãos backend/frontend. O inventário bruto do run acima registrou 289 checks aprovados, 53 achados no repositório completo, zero supressões e zero erros de parsing; o gate Dev/fundação trata apenas as 28 exceções explícitas, sem declarar UAT/Prod seguros ou operacionais.
 
 ## Auditoria do objetivo
 

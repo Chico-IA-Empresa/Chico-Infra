@@ -37,3 +37,9 @@ test('rejects missing ownership, foreign keys, wildcard inputs and legacy bucket
     { kmsKeyArns: [] }, { kmsKeyArns: ['arn:aws:kms:sa-east-1:999999999999:key/00000000-0000-0000-0000-000000000001'] },
   ]) assert.throws(() => devInfraPolicies({ ...inventory, ...change }));
 });
+test('rejects credential fields, duplicate keys and policies exceeding AWS quotas', () => {
+  assert.throws(() => devInfraPolicies({ ...inventory, accessKey: 'synthetic-forbidden-field' }), /metadata/);
+  assert.throws(() => devInfraPolicies({ ...inventory, kmsKeyArns: [...inventory.kmsKeyArns, ...inventory.kmsKeyArns] }), /Duplicate/);
+  const keys = Array.from({ length: 40 }, (_, n) => `arn:aws:kms:sa-east-1:123456789012:key/00000000-0000-0000-0000-${String(n).padStart(12, '0')}`);
+  assert.throws(() => devInfraPolicies({ ...inventory, kmsKeyArns: keys }), /quota/);
+});
