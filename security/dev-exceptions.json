@@ -303,13 +303,13 @@
     "check": "CKV2_AWS_62",
     "resource": "aws_s3_bucket.backup",
     "reason": "Notificação de cada objeto S3 não é requisito do PRD; não adicionar eventos/consumidores pagos por inferência.",
-    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
+    "compensatingControl": "State/auditoria têm access logs e versionamento; backup possui checksum, timer e métrica de frescor; sinks têm IAM de origem estrita. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem Get/GetObjectVersion/Put e AbortMultipartUpload/ListMultipartUploadParts próprios, sem Delete ou origem legada. Revisão do processo real: multipart permite abortar somente upload incompleto próprio; não concede DeleteObject, DeleteObjectVersion ou escrita/leitura na origem legada. Marcadores reais/fixture independentes; commit versionado é publicado antes do sucesso local.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
   },
   {
     "scope": "dev",
@@ -342,26 +342,26 @@
     "check": "CKV_AWS_144",
     "resource": "aws_s3_bucket.backup",
     "reason": "Baseline aprovado usa uma conta/região sa-east-1; replicação entre regiões não foi contratada.",
-    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
+    "compensatingControl": "Versionamento e recuperação isolada para state; restore/snapshot/backup Dev precisam prova operacional. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem Get/GetObjectVersion/Put e AbortMultipartUpload/ListMultipartUploadParts próprios, sem Delete ou origem legada. Revisão do processo real: multipart permite abortar somente upload incompleto próprio; não concede DeleteObject, DeleteObjectVersion ou escrita/leitura na origem legada. Marcadores reais/fixture independentes; commit versionado é publicado antes do sucesso local.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
   },
   {
     "scope": "dev",
     "check": "CKV_AWS_145",
     "resource": "aws_s3_bucket.backup",
     "reason": "State segue SSE-S3 por contrato; backup e destinos de access logs também usam SSE-S3, satisfazendo criptografia em repouso.",
-    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem somente Get/GetObjectVersion/Put próprios, sem Delete ou origem legada.",
+    "compensatingControl": "AES256 explícito, TLS, PAB, versionamento e IAM delimitado; keys de secrets e logs CloudWatch continuam CMK. Revisão fase 1: novo prefixo database separado, retenção 14 dias explícita e versionamento; runtime tem Get/GetObjectVersion/Put e AbortMultipartUpload/ListMultipartUploadParts próprios, sem Delete ou origem legada. Revisão do processo real: multipart permite abortar somente upload incompleto próprio; não concede DeleteObject, DeleteObjectVersion ou escrita/leitura na origem legada. Marcadores reais/fixture independentes; commit versionado é publicado antes do sucesso local.",
     "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceFile": "envs/dev/storage.tf",
-    "sourceSha256": "94cd7eb09f78aff974c2c532e0152a611933359664db9fb0831b516fefbac326"
+    "sourceSha256": "e3b7dacd1c7cfaad3f06ee4971d4054075aefb30bc160999834474466d463fd2"
   },
   {
     "scope": "shared",
@@ -492,5 +492,31 @@
     "reviewedAt": "2026-10-27",
     "expiresAt": "2027-01-25",
     "sourceSha256": "fa06e869fddce5e64182784f811370f975a97a433353b9a418a1e8870d79f8af"
+  },
+  {
+    "check": "CKV_AWS_338",
+    "resource": "aws_cloudwatch_log_group.flow",
+    "sourceFile": "envs/dev/flow-logs.tf",
+    "reason": "Flow Logs Dev mantêm os 30 dias do PRD R09; retenção anual adicionaria custo sem requisito aprovado.",
+    "compensatingControl": "Grupo exclusivo /chico/dev/flow, CMK de logs revisada, entrega por role com conta/origem restritas, retenção explícita de 30 dias. Entrega e cobertura financeira permanecem gates AWS.",
+    "reference": "docs/contracts/dev-infra-prd.md R09; docs/security-exceptions-review.md",
+    "scope": "dev",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "1c1126fdf4e3738dade63b830755e0c6bf5f70687267bfb93e2c4fcd5b90a169"
+  },
+  {
+    "check": "CKV_AWS_112",
+    "resource": "aws_ssm_document.session",
+    "sourceFile": "envs/dev/ssm.tf",
+    "reason": "O check exige kmsKeyId adicional no conteúdo Session. O contrato exige trânsito cifrado e logs CMK; TLS padrão do Session Manager já cifra o trânsito. Não há requisito aprovado de segunda camada KMS de sessão.",
+    "compensatingControl": "Documento Standard_Stream com CloudWatch streaming/encryption habilitados, grupo /chico/dev/ssm com CMK, idle 15 min/max 60 min. Não habilitar trust/SSH nem registrar credenciais. Seleção efetiva do documento e entrega cifrada devem ser provadas no host; a camada KMS opcional não é declarada habilitada.",
+    "reference": "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-preferences-enable-encryption.html; docs/contracts/dev-infra-prd.md R04/R09; docs/security-exceptions-review.md",
+    "scope": "dev",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-27",
+    "expiresAt": "2027-01-25",
+    "sourceSha256": "027a6edd11f3a32aa5ce5518d1c1a19d7f1e025ca6625a4be1ee598f217cc44e"
   }
 ]

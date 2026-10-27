@@ -30,7 +30,7 @@ Descoberta não é seleção ou prova de cadeia íntegra. O bucket legado perman
 9. Aplicar tratamento de dados pessoais/credenciais somente no clone, com regras e impacto documentados. Não anonimizar dados de negócio indiscriminadamente nem substituir a cópia por seed sintético.
 10. Gerar backup próprio da base restaurada em `dev/database/`, com manifesto/checksums/versões. Fazer segunda restauração em destino isolado vazio e reconciliar. Separar timer/frescor/métricas/retention da fixture. Provar persistência após reboot e SSM online, com escritores desligados; retirar acesso temporário à origem e encerrar staging pelos IDs/lote aprovados após comprovar recuperação.
 
-Scripts/timers de `fixtures/dev` são exclusivamente sintéticos e não devem receber a base real. Grant/lifecycle `dev/database/` não instala sozinho um backup nem comprova sua recuperação. O processo real e seu ensaio completo são gate da onda 6B após seleção, compatibilidade e classificação da cópia.
+Scripts/timers de `fixtures/dev` são exclusivamente sintéticos e não devem receber a base real. O pacote [operations/dev-database](../operations/dev-database/README.md) implementa dump/manifesto no mesmo snapshot, commit S3 versionado, prova isolada e timer/frescor próprios. Sua instalação é explícita após credenciais, capacidade e tratamento revisados; grant/lifecycle não instala nem comprova recuperação. A integração CI usa PostgreSQL16 sintético e storage fake; o backup real e sua segunda restauração continuam gate da onda 6B.
 
 ## Evidência e encerramento
 

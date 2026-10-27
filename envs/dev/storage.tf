@@ -97,7 +97,7 @@ resource "aws_iam_role_policy" "backup" {
   role  = aws_iam_role.runtime[0].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.backup[0].arn, Condition = { StringLike = { "s3:prefix" = local.backup_prefixes } } },
-    { Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"], Resource = [for prefix in local.backup_prefixes : "${aws_s3_bucket.backup[0].arn}/${prefix}"] }
+    { Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"], Resource = [for prefix in local.backup_prefixes : "${aws_s3_bucket.backup[0].arn}/${prefix}"] }
   ] })
 }
 output "backup" {

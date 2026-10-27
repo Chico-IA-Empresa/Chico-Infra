@@ -54,6 +54,11 @@ jobs:
           python-version: '3.12'
       - run: python tests/config-consumer.test.py
       - run: python tests/proxy-events.test.py
+      - run: python tests/dev-database-backup.test.py
+      - name: Synthetic PostgreSQL16 database backup and isolated recovery
+        env:
+          CHICO_DATABASE_INTEGRATION: 'true'
+        run: sudo --preserve-env=CHICO_DATABASE_INTEGRATION "$(command -v python)" tests/dev-database-backup-integration.py
   security:
     name: Terraform security
     runs-on: ubuntu-latest

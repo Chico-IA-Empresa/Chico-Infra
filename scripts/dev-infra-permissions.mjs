@@ -94,7 +94,7 @@ export function devInfraPolicies(i) {
     allow('DevLogs', ['logs:CreateLogStream', 'logs:DescribeLogStreams', 'logs:PutLogEvents'], `${logs}:*`, region),
     allow('DevMetrics', ['cloudwatch:PutMetricData'], '*', { StringEquals: { ...region.StringEquals, 'cloudwatch:namespace': 'Chico/Dev' } }),
     allow('DevBackupListing', ['s3:ListBucket'], `arn:aws:s3:::${backup}`, { StringLike: { 's3:prefix': ['dev/fixtures/*', 'dev/database/*'] } }),
-    allow('DevBackupObjects', ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'], ['fixtures', 'database'].map(prefix => `arn:aws:s3:::${backup}/dev/${prefix}/*`)),
+    allow('DevBackupObjects', ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'], ['fixtures', 'database'].map(prefix => `arn:aws:s3:::${backup}/dev/${prefix}/*`)),
     allow('DevSecrets', ['secretsmanager:GetSecretValue'], secret, region),
     allow('DevSecretKeys', ['kms:Decrypt'], i.kmsKeyArns, { StringEquals: { 'kms:ViaService': 'secretsmanager.sa-east-1.amazonaws.com' }, StringLike: { 'kms:EncryptionContext:SecretARN': secret } }),
     allow('DevNonSecretParameters', ['ssm:GetParameters'], parameter, region),
