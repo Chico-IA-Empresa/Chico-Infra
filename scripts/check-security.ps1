@@ -6,7 +6,8 @@ try {
   foreach ($taskScope in @('bootstrap', 'shared', 'dev')) {
     $taskDirectory = if ($taskScope -eq 'bootstrap') { 'bootstrap' } else { "envs/$taskScope" }
     $taskReport = "reports/checkov-$taskScope-scope.json"
-    & $Python $CheckovScript -d $taskDirectory --framework terraform --quiet --skip-download -o json > $taskReport
+    # Match CI: scan source without pruning default-off conditional resources.
+    & $Python $CheckovScript -d $taskDirectory --framework terraform --quiet --skip-download --evaluate-variables false -o json > $taskReport
     if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov crashed in $taskScope" }
     node scripts/security-gate.mjs $taskReport $taskScope
     if ($LASTEXITCODE -ne 0) { throw "Security review failed in $taskScope" }
