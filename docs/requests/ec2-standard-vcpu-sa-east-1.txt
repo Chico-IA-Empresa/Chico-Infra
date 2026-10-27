@@ -1,0 +1,18 @@
+Subject: EC2 Standard On-Demand vCPU quota increase to 12 in sa-east-1
+
+Account: 306915830875
+Region: sa-east-1 (South America - Sao Paulo)
+Service code: ec2
+Quota code: L-1216C47A
+Current applied quota: 5 vCPUs
+Requested new TOTAL quota: 12 vCPUs
+
+We are preparing a migration for ChicoIA using one existing AWS account and isolated Dev, UAT and Prod environments.
+
+The baseline requires three ARM64 t4g.small EC2 hosts (2 default vCPUs each): one Dev host and one ECS worker host in each of UAT and Prod. This requires 6 vCPUs when all environments are active.
+
+We request an overall limit of 12 vCPUs to allow the 6-vCPU baseline, up to two additional 2-vCPU worker hosts during replacement/recovery, and one temporary 2-vCPU host equivalent for a reviewed recovery/sanitization task. Temporary capacity is not a permanently duplicated production environment.
+
+API and scheduled workloads run on Fargate, whose quota is managed separately. This request concerns only EC2 Standard On-Demand capacity in sa-east-1. It does not request instance launches or any paid commitment.
+
+No quota request was submitted by the agent in this read-only preparation. Please submit this text only as part of the reviewed quota request or if AWS asks for further justification.

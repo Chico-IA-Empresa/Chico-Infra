@@ -1,0 +1,7 @@
+# Local QEMU fixture only. Never include this file in an AWS/native release.
+# Redis's ARM64 kernel self-test inspects /proc/self/smaps, which under user-mode
+# emulation belongs to an x86_64 host. No durable Redis state is claimed here:
+# cache is reconstructible; AOF, snapshots and background save are disabled.
+services:
+  redis:
+    command: [redis-server, --appendonly, "no", --save, "", --ignore-warnings, ARM64-COW-BUG]

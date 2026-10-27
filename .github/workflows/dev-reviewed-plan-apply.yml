@@ -1,0 +1,123 @@
+name: Dev private reviewed plan and apply
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [plan, apply]
+        required: true
+      bundle_id:
+        description: Approved plan run ID (apply only)
+        type: string
+      plan_version:
+        description: Exact S3 version from private review (apply only)
+        type: string
+      manifest_version:
+        description: Exact manifest S3 version (apply only)
+        type: string
+      approved_manifest_sha256:
+        description: Hash approved by reviewer (apply only)
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify required GitHub protections before requesting credentials
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+          OPERATION: ${{ inputs.operation }}
+        run: node scripts/github-readiness.mjs "$OPERATION"
+  execute:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ inputs.operation == 'plan' && 'infra-plan-dev' || 'infra-apply-dev' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Validate gates and prepare private files
+        env:
+          BACKEND_CONFIG: ${{ secrets.BACKEND_CONFIG }}
+          TF_VARS_JSON: ${{ secrets.TF_VARS_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$BACKEND_CONFIG" > envs/dev/backend.hcl
+          printf '%s' "$TF_VARS_JSON" > envs/dev/ci.auto.tfvars.json
+          node scripts/execution-gates.mjs envs/dev/ci.auto.tfvars.json
+          node scripts/backend-guard.mjs envs/dev/backend.hcl "$ACCOUNT"
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ inputs.operation == 'plan' && vars.PLAN_ROLE_ARN || vars.APPLY_ROLE_ARN }}
+          aws-region: sa-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Initialize approved backend privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform -chdir=envs/dev init -input=false -lockfile=readonly -backend-config=backend.hcl > "$RUNNER_TEMP/init.log" 2>&1
+      - name: Private plan or apply
+        env:
+          OPERATION: ${{ inputs.operation }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          PLAN_VERSION: ${{ inputs.plan_version }}
+          MANIFEST_VERSION: ${{ inputs.manifest_version }}
+          APPROVED_HASH: ${{ inputs.approved_manifest_sha256 }}
+          REVIEW_BUCKET: ${{ vars.PRIVATE_REVIEW_BUCKET }}
+          ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          trap 'rm -f envs/dev/{backend.hcl,ci.auto.tfvars.json,review.tfplan,review-manifest.json} "$RUNNER_TEMP"/{plan.log,apply.log,init.log}' EXIT
+          # Existing reviewed bucket only. No bucket creation or public artifacts.
+          aws s3api get-public-access-block --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" > "$RUNNER_TEMP/pab.json"
+          jq -e '.PublicAccessBlockConfiguration | .BlockPublicAcls and .IgnorePublicAcls and .BlockPublicPolicy and .RestrictPublicBuckets' "$RUNNER_TEMP/pab.json" >/dev/null
+          test "$(aws s3api get-bucket-versioning --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --query Status --output text)" = Enabled
+          if test "$OPERATION" = plan; then
+            terraform -chdir=envs/dev plan -input=false -lock-timeout=120s -out=review.tfplan > "$RUNNER_TEMP/plan.log" 2>&1
+            node scripts/plan-binding.mjs create envs/dev "$GITHUB_SHA" "$ACCOUNT"
+            prefix="dev/$GITHUB_SHA/$GITHUB_RUN_ID"
+            for file in review.tfplan review-manifest.json; do
+              aws s3api put-object --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --key "$prefix/$file" --body "envs/dev/$file" --server-side-encryption AES256 --query '{VersionId:VersionId}'
+            done
+            echo "Private review bundle: $GITHUB_RUN_ID; commit: $GITHUB_SHA"
+          else
+            [[ "$BUNDLE_ID" =~ ^[0-9]+$ ]] && [[ "$APPROVED_HASH" =~ ^[a-f0-9]{64}$ ]]
+            test -n "$PLAN_VERSION" && test "$PLAN_VERSION" != null
+            test -n "$MANIFEST_VERSION" && test "$MANIFEST_VERSION" != null
+            prefix="dev/$GITHUB_SHA/$BUNDLE_ID"
+            aws s3api get-object --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --key "$prefix/review.tfplan" --version-id "$PLAN_VERSION" envs/dev/review.tfplan >/dev/null
+            aws s3api get-object --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --key "$prefix/review-manifest.json" --version-id "$MANIFEST_VERSION" envs/dev/review-manifest.json >/dev/null
+            node scripts/plan-binding.mjs verify envs/dev "$GITHUB_SHA" "$ACCOUNT" "$APPROVED_HASH"
+            terraform -chdir=envs/dev apply -input=false -lock-timeout=120s review.tfplan > "$RUNNER_TEMP/apply.log" 2>&1
+          fi
+      - name: Remove private execution files after any result
+        if: always()
+        shell: bash
+        run: |
+          rm -f envs/dev/{backend.hcl,ci.auto.tfvars.json,review.tfplan,review-manifest.json} "$RUNNER_TEMP"/{plan.log,apply.log,init.log,pab.json}

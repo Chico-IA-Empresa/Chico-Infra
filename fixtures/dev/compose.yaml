@@ -1,0 +1,51 @@
+# All images are supplied by reviewed ARM64 digest. No business application.
+name: chico-dev-fixture
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?pinned postgres16 ARM64 digest required}
+    environment:
+      POSTGRES_USER: fixture
+      POSTGRES_DB: fixture
+      POSTGRES_PASSWORD_FILE: /run/secrets/fixture_password
+    secrets: [fixture_password]
+    volumes:
+      - fixture_pg:/var/lib/postgresql/data
+    networks: [isolated]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fixture -d fixture]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  static:
+    image: ${STATIC_IMAGE:?pinned static ARM64 image digest required}
+    command: [sh, -c, 'mkdir -p /www && printf "chico-dev-synthetic\n" > /www/index.html && exec httpd -f -p 8080 -h /www']
+    read_only: true
+    tmpfs: [/www]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [isolated]
+    restart: unless-stopped
+  proxy:
+    image: ${CADDY_IMAGE:?pinned Caddy ARM64 digest required}
+    profiles: [tls]
+    environment:
+      DEV_HOSTNAME: ${DEV_HOSTNAME:?approved Dev hostname required}
+      ACME_DIRECTORY: ${ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/chico/tls:/data
+      - proxy_config:/config
+    networks: [isolated, edge]
+    restart: unless-stopped
+secrets:
+  fixture_password:
+    file: /run/chico/fixture_password
+networks:
+  isolated:
+    internal: true
+  edge: {}
+volumes:
+  fixture_pg: {}
+  proxy_config: {}

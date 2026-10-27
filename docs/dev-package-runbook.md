@@ -1,0 +1,67 @@
+# Pacote Dev local — execução e limites
+
+Autorização vigente de 23/10/2026: implementar/testar localmente; sem plugin ou execução AWS. README da migração e PRD v3 prevalecem. O [relatório por ticket](dev-package-status.md) distingue código de aceite. Não executar os comandos AWS dos documentos anteriores nesta rodada.
+
+## Preparação
+
+1. Usar Docker Linux com emulação ARM64 disponível ou host ARM64 local. Não instalar infraestrutura AWS alternativa. Em 26/10 o engine Linux 29.4.3 voltou a funcionar; builds e execução ARM64 foram comprovados com QEMU. O incidente de 23/10 é histórico. Ver [provas atuais](../../ChicoIA-AWS/evidencias/2026-10-26/pacote-local.md).
+2. Revisar `package/build-local.ps1`: exporta três arquivos OCI com metadados e SHA base de cada checkout para um diretório NOVO fora dos contextos. Targets API/workers usam a mesma árvore backend. As alterações ainda não foram commitadas; o SHA base não representa sozinho o conteúdo local. Não usar esses builds como release aprovada de um commit. Registrar também os novos arquivos e os hashes da árvore efetivamente construída; o patch Git sozinho não contém arquivos novos.
+3. As bases estão fixadas por digest, com presença ARM64 consultada no Docker Hub em `reports/package-base-images.json`. Python 3.12 está em manutenção de segurança até outubro de 2028; Node 24 é LTS. Referências: [Python](https://devguide.python.org/versions/), [release Python 3.12.15](https://blog.python.org/2026/10/python-31022-31117/), [Node](https://nodejs.org/en/about/previous-releases), [Node 24.22.1](https://nodejs.org/en/blog/release/v24.22.1). Consulta de base não comprova build de dependências nativas nem scan da aplicação. Scan final é 007.
+4. Importar os OCI em daemon local que preserve seu conteúdo, registrar o image ID, índice OCI e manifest ARM64 separadamente. `scripts/package-oci-evidence.py` verificou os hashes de índice, manifest, config e layers dos três exports, arquitetura/usuário, identidade carregada e layers/árvore backend compartilhados. No image store containerd local, image ID coincide com índice, não com config digest. [Ledger observado](../reports/package-oci-20261026.json). As tags locais são `chico-api:local-fixture`, `chico-workers:local-fixture`, `chico-frontend:local-fixture`; não são referências ECR.
+
+## Configuração e paths
+
+`scripts/package-fixture.py` gera apenas valores sintéticos aleatórios, sem stdout de valores, em diretório NOVO fora de Git e dos contextos. Em Linux, executar como operador autorizado a atribuir ownership: diretório 0700, arquivos 0400, JSON dos consumidores UID/GID 10001. PostgreSQL recebe apenas arquivos de senha necessários ao bootstrap; API recebe só `api.json`, migrator só `migrator.json`, seed só `seed.json`, harness só `workers.json`. Montagens de secrets Compose por arquivo podem ignorar uid/gid/mode: os modos/owners do arquivo fonte precisam ser comprovados no daemon/host utilizado. Windows ACL e bind mounts não equivalem à prova POSIX.
+
+`scripts/package-data.py` recusa diretório existente ou symlink e prepara somente um diretório NOVO de fixture. Não o usar em `/srv/chico` já existente. No host futuro, receber paths/ownership do DEV-INFRA-006/009; o pacote não altera bootstrap, não instala Docker, não formata ou cria EBS.
+
+| Serviço | Destino no container | Contrato futuro da fase 1 | UID/GID esperado | Persistência/backup |
+|---|---|---|---|---|
+| PostgreSQL | /var/lib/postgresql/data | /srv/chico/postgres | 999:999, confirmar imagem em execução | PG16; dump e restore pela fase 1; não copiar PGDATA online |
+| Redis | /data | /srv/chico/redis | 999:999, confirmar | AOF; cache reconstruível, persistência local deve ser testada |
+| API | /app/data | /srv/chico/files | 10001:10001 | arquivo durável; backup fase 1/AWS-023 |
+| proxy | /etc/nginx/tls:ro | /srv/chico/tls | 101:101, confirmar | fixture vazia; nenhum TLS emitido; futuro backup de estado aplicável |
+
+No laboratório todos os paths são `${PACKAGE_DATA_ROOT}/...`, em raiz de fixture exclusiva no daemon Docker local. Os diretórios novos `/srv/chico/fixture/package-20261026-*` não são paths de um host AWS nem substituem o bootstrap/handoff. Não reutilizar diretórios reais da aplicação. Paths AWS continuam dependentes de DEV-INFRA-006/009 e gates.
+
+Definir somente referências/path e tags locais na sessão de shell: `API_IMAGE`, `WORKERS_IMAGE`, `FRONTEND_IMAGE`, `PACKAGE_DATA_ROOT`, `PACKAGE_CONFIG_ROOT`, `PACKAGE_PORT` e `SITE_URL`. Não há env_file global. Não passar DATABASE_URL/senhas em linha de comando. O backend lê JSON antes de Settings; dotenv fica desabilitado. A matriz tem 142 pares nome/consumidor e cobre os onze processos com overrides essenciais; defaults de tuning continuam no código. Credenciais financeiras não são aceitas. A allowlist AWS existente resolve apenas a fixture SYNTHETIC_TOKEN: não expandir IAM nem resolver segredos reais a partir desta matriz. Adaptação autorizada de refs/helper e rotação/negação reais dependem da fase 1.
+
+Rotação sintética: resolver privadamente nova versão para arquivo do consumidor; recriar somente esse consumidor. Para senha SQL, primeiro coordenar ALTER ROLE no banco de teste e só depois relançar a conexão; trocar JSON sozinho não altera a senha no PostgreSQL. Arquivos do consumidor parado devem ser removidos pelo operador no caminho exato validado; não há limpeza automática de paths externos. No host, usar `/run/chico` volátil; após reboot, resolver de novo antes de subir. Não imprimir arquivo nem `docker inspect` completo.
+
+## Ordem da stack e provas ainda exigidas
+
+Usar `package/compose.yaml` e projeto exclusivo. `config --quiet` valida sem daemon. Iniciar somente PostgreSQL/Redis; aguardar probes com timeout de 180 segundos. Migrator deve finalizar 0, depois seed finalizar 0; API depende de ambos, web depende de readiness API e proxy depende de web. Usar `--wait --wait-timeout 180` onde aplicável e conferir State.ExitCode dos one-offs, sem capturar Env. Não reutilizar projeto com serviços antigos para simular promoção.
+
+Migrator usa a imagem API, identidade `chico_migrator`, advisory lock de sessão e `alembic upgrade heads` com conexão compartilhada. Só aceita `chico_package_test` local, ambiente development e host allowlisted. Banco vazio executa baseline real. Schema sem revisão ou revisão órfã falha antes do upgrade; nenhum stamp/repair automático. O verificador reaproveitado cobre existência das tabelas, não todas as colunas/constraints. Drift de colunas continua exigindo diagnóstico específico. Migração pode ter commits: falha posterior exige fix-forward, nunca downgrade automático ou suposição de rollback de banco pela troca de imagem.
+
+Seed v1 só aceita `chico_seed` em banco `chico_package_test` local PG16. Não cria schema, apaga dados ou consulta Prod. Usa IDs reservados com guardas de colisão, data UTC fixa, usuário `package@example.com` (domínio de exemplo aceito por EmailStr), senha aleatória privada, bcrypt, duas equipes, uma partida e três odds. Em 26/10 seed/reexecuções/login passaram, com snapshot estável. A antiga fixture @example.invalid fica preservada, sem atualização silenciosa do usuário. Consultar `/matches/package-v1-match`; sua data fixa não é a data de `/public/today`. Head observado no banco vazio e na atualização da baseline: `retire20260926`. Hash de senha/token/DSN nunca entram nas evidências.
+
+App/DB/cache ficam na bridge `isolated` com `internal:true`; apenas o proxy sem credenciais também entra em `ingress`, pois Docker não publica portas da bridge exclusivamente interna. Bind só em loopback; DB/cache/API/web não publicam portas. Sem socket Docker, host network ou acesso IMDS configurado. Limites 512MiB/1 CPU não provam capacidade t4g.small. O ensaio verificou health/exit, recreate, cache frio reconstruível e LISTEN/NOTIFY entregue via WS; `/health/ready` sozinho comprova apenas DB. Recursos são amostras QEMU, não pico absoluto/benchmark.
+
+O perfil `mock-workers` executa apenas `package_worker_smoke.py`: onze ciclos limitados, polls vazios de odds/Sofa, locks/heartbeats, inbox sintética com dispatch mockado e relatórios com processamento real/fake LLM/persistência capturada. `package/test-workers-local.ps1` complementa com testes existentes de odds, análise, relatórios, Sofa staging/orquestração/materialização usando a imagem ARM64 e PG16 migrado. Transação externa desfaz dados dos testes; nenhum SQLite/create_all ou provedor real. Topologia de negócio fica desabilitada em `x-business-topology`. AWS-018/019 continuam responsáveis pelo controle operacional dos loops reais.
+
+## Frontend e duas origens
+
+Navegador usa `/api` fixo, sem ambiente embutido; servidor usa BACKEND_URL runtime absoluta. SITE_URL, indexação e allowlist pública Firebase são resolvidos em runtime, sem patch/rebuild. Fallback NEXT_PUBLIC legado continua público e documentado para o deploy existente; o build do pacote exclui .env. Config Firebase pública não contém credencial de servidor. Fixtures não recebem chaves Firebase/OAuth; indexação e analytics ficam desligados.
+
+Contrato do proxy local: `/api/contact` e `/api/chat*` vão ao Next preservando caminho; demais `/api/*` vão ao FastAPI removendo prefixo. WS `/api/ws/odds` usa upgrade, SSE não tem buffering e tem timeout de leitura de 120s. Otimização de imagens permanece no Next. nginx não registra query do token WS. Contrato final de rotas/AWS-003 permanece pendente.
+
+Executar a mesma imagem em projetos A/B, portas 18080/18081 e hostnames locais distintos (`127.0.0.1` e `localhost`) para cookies host-only. Portas diferentes no mesmo hostname não isolam cookies. Usar também configurações DB/SECRET_KEY e volumes de projeto separados. Conferir login, refresh concorrente, logout, cookie Domain/Path/Secure/SameSite, WS autenticado/reconexão, SSE, SSR, /api/contact com mock e image optimizer. Os testes unitários destas rotas não substituem esse ensaio. Nenhum domínio OAuth/Firebase/DNS real foi alterado.
+
+## Manifesto e gates
+
+`node scripts/package-bundle.mjs` atualiza o exemplo sintético; argumento opcional cria diretório NOVO com bundle, manifesto e índice/hash do envelope. `node scripts/package-manifest.mjs package/manifest.synthetic.json` valida offline; `--final` recusa exemplo sintético. A função do validador também permite conferir hashes de arquivos/evidências em root fornecida e compatibilidade exata de heads. Resultado offline de candidato é validação estrutural, não autorização AWS. Não existe comando de publicação/deploy nesta entrega.
+
+O manifesto distingue SHAs backend/frontend, build compartilhado API/workers, índice/manifest ARM64/image ID, revisões, compatibilidade web/mobile pendente e checks/scan ligados ao manifest digest. Atualizar frontend preserva imagens backend. Alterações nos sete arquivos versionados mudam o hash do conteúdo; o índice do envelope inclui também o manifesto. Não inventar digests reais para substituir a fixture. Publicação ECR/scan (007) e ensaio SSM (008) exigem Gate 01, autorização explícita AWS, créditos elegíveis/cobertura/reserva e handoff aceitos. Todos permanecem pendentes.
+
+## Repetição do laboratório de 26/10
+
+`package/fixture-session.ps1` deve ser dot-sourced com RunId/Project exclusivos; define somente referências e paths não sensíveis e `$PackageCompose`. Em Windows, os paths `/srv/chico/fixture/...` pertencem ao daemon Linux: validar ali os arquivos e modos. O cliente Compose pode avisar que não vê os arquivos e que ignora uid/gid/mode; isso não comprova sucesso nem falha do mount. Os ensaios verificaram a leitura e os modos efetivos no daemon. Não publicar `compose config` completo contendo valores de outra sessão.
+
+`compose.emulated.yaml` é somente QEMU: Redis sem AOF/snapshot, cache reconstruível. `compose.web-fixture.yaml` monta preload de mocks de e-mail/SSE e usa somente placeholders conhecidos. `compose.maintenance-fault.yaml` injeta exit 42. Esses três overrides não entram no bundle nativo/AWS. Não aplicar em ambientes reais.
+
+`package/test-workers-local.ps1` monta testes e conftest PG16, nunca o conftest raiz SQLite. Os wheels de pytest 8.3.5/pytest-asyncio 0.24.0 e dependências puramente Python estão no diretório privado do daemon `/srv/chico/fixture/package-20261026-run2/test-wheels`; preparar dependências equivalentes numa nova máquina antes de repetir. Eles não são dependências da imagem de produção. O script usa somente fixtures sintéticas e rollback externo, preservando contagens ao terminar.
+
+`scripts/package-browser-smoke.cjs` usa Playwright no NODE_PATH e Edge headless, bloqueia tráfego fora das duas origens e lê somente senha sintética por pipe privado. Também gira a chave sintética do projeto b e reinicia apenas sua API. Não executá-lo apontando a outro ambiente. `package-http-smoke.py` comprova auth/WS e PG LISTEN/NOTIFY usando somente a fixture montada; não imprime respostas/cookies/tokens. `package-migration-faults.py` injeta revisão órfã explicitamente e restaura o head registrado em finally; usar somente na fixture descartável identificada, jamais como ferramenta de reparo.
+
+Para candidato não sintético, o CLI exige `--final --root <diretorio-do-bundle-e-evidencias>` e confere a presença das evidências e os hashes do conteúdo. Mesmo assim retorna `promotable:false` e `awsAcceptance:not-evaluated`: o validador nunca libera execução AWS. A autenticidade/proveniência das evidências, o scan real e os gates continuam sob 007/008 e revisão do responsável.

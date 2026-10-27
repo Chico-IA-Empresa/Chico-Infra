@@ -1,0 +1,16 @@
+# Reference only; application deployment replaces static fixture after infra acceptance.
+# Values identify Compose services. Do not enable before application handoff.
+{$DEV_HOSTNAME} {
+  handle /api/contact {
+    reverse_proxy frontend:3000
+  }
+  handle_path /api/* {
+    reverse_proxy api:8000
+  }
+  handle /ws/* {
+    reverse_proxy api:8000
+  }
+  handle {
+    reverse_proxy frontend:3000
+  }
+}

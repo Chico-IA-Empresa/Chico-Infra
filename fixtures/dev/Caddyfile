@@ -1,0 +1,10 @@
+{
+  acme_ca {$ACME_DIRECTORY}
+}
+{$DEV_HOSTNAME} {
+  log {
+    output file /data/access.log
+    format json
+  }
+  reverse_proxy static:8080
+}

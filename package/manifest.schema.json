@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chico:dev-package:manifest:1",
+  "title": "Chico package manifest v1",
+  "$comment": "package-manifest.mjs additionally enforces source/build/digest links, passed evidence, exact heads and bundle hashes. Offline validation is not AWS acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "synthetic",
+    "backendSha",
+    "frontendSha",
+    "images",
+    "alembicHeads",
+    "bundle",
+    "apiContract",
+    "mobile",
+    "configuration"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "backendSha": {
+      "$ref": "#/$defs/sha"
+    },
+    "frontendSha": {
+      "$ref": "#/$defs/sha"
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api",
+        "workers",
+        "frontend"
+      ],
+      "properties": {
+        "api": {
+          "$ref": "#/$defs/image"
+        },
+        "workers": {
+          "$ref": "#/$defs/image"
+        },
+        "frontend": {
+          "$ref": "#/$defs/image"
+        }
+      }
+    },
+    "alembicHeads": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9_]+$"
+      }
+    },
+    "apiContract": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mobile": {
+      "const": "pending-no-released-clients"
+    },
+    "configuration": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "reference",
+          "version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "reference": {
+            "type": "string",
+            "pattern": "^/chico/(dev|uat|prod)/[a-z-]+/[A-Z][A-Z0-9_]*$"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          }
+        }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "files",
+        "checksum"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checksum": {
+          "$ref": "#/$defs/digest"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compose.yaml",
+            "init-roles.sh",
+            "nginx.conf",
+            "package_migrate.py",
+            "package_seed.py",
+            "configuration-matrix.json",
+            "manifest.schema.json"
+          ],
+          "properties": {
+            "compose.yaml": {
+              "$ref": "#/$defs/digest"
+            },
+            "init-roles.sh": {
+              "$ref": "#/$defs/digest"
+            },
+            "nginx.conf": {
+              "$ref": "#/$defs/digest"
+            },
+            "package_migrate.py": {
+              "$ref": "#/$defs/digest"
+            },
+            "package_seed.py": {
+              "$ref": "#/$defs/digest"
+            },
+            "configuration-matrix.json": {
+              "$ref": "#/$defs/digest"
+            },
+            "manifest.schema.json": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence",
+        "digest"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "synthetic"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_./-]+$"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "sourceSha",
+        "buildId",
+        "platform",
+        "indexDigest",
+        "manifestDigest",
+        "localImageId",
+        "checks",
+        "scan"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$"
+        },
+        "sourceSha": {
+          "$ref": "#/$defs/sha"
+        },
+        "buildId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "const": "linux/arm64"
+        },
+        "indexDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "manifestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "localImageId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/digest"
+            }
+          ]
+        },
+        "checks": {
+          "$ref": "#/$defs/evidence"
+        },
+        "scan": {
+          "$ref": "#/$defs/evidence"
+        }
+      }
+    }
+  }
+}
