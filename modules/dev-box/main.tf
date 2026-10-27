@@ -11,6 +11,15 @@ variable "bootstrap_user_data" {
   default     = null
 }
 variable "compose_version" { type = string }
+variable "root_volume_size_gib" {
+  description = "Explicitly reviewed capacity; phase 1 approved proposal uses 80 GiB after backup sizing."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.root_volume_size_gib >= 30 && var.root_volume_size_gib <= 80 && floor(var.root_volume_size_gib) == var.root_volume_size_gib
+    error_message = "Capacidade gp3 inteira de 30 a 80 GiB; delta maior exige revisão do contrato."
+  }
+}
 variable "compose_sha256" {
   type = string
   validation {
@@ -50,9 +59,12 @@ locals {
   ])
 }
 resource "aws_instance" "this" {
-  ebs_optimized               = true
-  ami                         = var.ami_id
-  instance_type               = "t4g.small"
+  ebs_optimized = true
+  ami           = var.ami_id
+  instance_type = "t4g.small"
+  credit_specification {
+    cpu_credits = "standard"
+  }
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [var.security_group_id]
   iam_instance_profile        = var.instance_profile_name
@@ -67,7 +79,7 @@ resource "aws_instance" "this" {
   root_block_device {
     encrypted             = true
     volume_type           = "gp3"
-    volume_size           = 30
+    volume_size           = var.root_volume_size_gib
     delete_on_termination = false
   }
   monitoring  = false

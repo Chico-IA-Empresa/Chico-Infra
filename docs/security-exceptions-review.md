@@ -2,13 +2,16 @@
 
 O gate desta fase cobre `bootstrap`, `envs/shared` e `envs/dev`, incluindo os módulos locais referenciados. O scanner completo do repositório continua executado para inventariar também os blueprints UAT/Prod. O aceite destes ambientes permanece fora da fase Dev.
 
-Não há supressões Checkov, baseline automático nem soft-fail global. O scan bruto continua registrando as falhas. `security/dev-exceptions.json` contém 28 decisões específicas por scope, check e recurso, revisadas tecnicamente nesta implementação, subordinadas ao PRD. Esta revisão não representa aprovação humana de um plan nem aceite operacional AWS.
+Não há supressões Checkov, baseline automático nem soft-fail global. O scan bruto continua registrando as falhas. `security/dev-exceptions.json` contém 43 decisões específicas por scope, check e recurso, revisadas tecnicamente nesta implementação, subordinadas ao PRD. Esta revisão não representa aprovação humana de um plan nem aceite operacional AWS.
+
+Na preparação da fase 1, dez decisões foram acrescentadas para review storage e os sinks próprios de planos/backup Dev: SSE-S3 compatível com o workflow/log delivery, ausência de replicação inter-regional não contratada, ausência de notificação por objeto não requerida e ausência de logging recursivo no sink Dev. Cada entrada identifica seu recurso/hash; não há exceção global. Os quatro arquivos alterados com decisões anteriores foram revistos individualmente: validação/prefixo do sink, CPU Standard/capacidade do host, limpeza ECR opt-in e prefixo/retention do banco real. Grants de backup não dão acesso à origem legada. CMKs/policies de serviço e entrega real ainda exigem revisão do plan e prova AWS.
 
 Cada decisão inclui justificativa, controle compensatório, referência, revisor técnico, revisão em 27/10/2026, expiração em 25/01/2027 e hash SHA256 do arquivo de origem (texto normalizado para LF). Mudança no código coberto, achado novo, supressão no scanner, parsing incompleto, entrada duplicada, decisão obsoleta ou vencida bloqueia o gate. Revisões posteriores devem reavaliar a decisão; não atualizar o hash automaticamente para obter verde.
 
 | Controle | Decisão e verificação |
 |---|---|
 | CKV_AWS_338 | Logs mantêm 30 dias do PRD R09. Criptografia e retenção constam do código; comprovação de entrega e cotação continuam na AWS. |
+| CKV_AWS_112 | Exceção exclusiva do documento Session Dev: TLS padrão cifra o trânsito; logs usam CMK. O check exige a segunda camada opcional `kmsKeyId`, que não integra o contrato atual. Não declarar essa camada habilitada; seleção efetiva do documento e entrega cifrada continuam gates AWS. |
 | CKV_AWS_126 | CPU/status usam coleta padrão de cinco minutos. Memória, disco e frescor de backup têm coletores e timers próprios. Detailed monitoring pago não foi acrescentado. |
 | CKV_AWS_260 | Porta 80 serve ao ACME/redirect do edge, conforme R08. Somente 80/443 públicas; redirect real ainda deve ser demonstrado. |
 | CKV_AWS_136 | Registry usa AES256, tags imutáveis e digests. CMK para ECR não foi exigida; keys de secrets e CloudWatch permanecem CMK. |
@@ -23,6 +26,8 @@ Cada decisão inclui justificativa, controle compensatório, referência, reviso
 
 As falhas anteriores de access logging de state/auditoria e CloudTrail→CloudWatch/SNS foram tratadas em código. Foram acrescentados destinos privados exclusivos, retenção exigida por input, role de delivery e policy SNS limitada ao trail. Nenhum recurso foi criado; policies efetivas de KMS, custo e recebimento ainda precisam validação AWS.
 
-As exceções não dão autorização para apply. A identidade conectada encontrada em 27/10 era root; esta rodada só fez leituras/validação de policy. Primeiro executor e CI continuam exigindo funções temporárias, revisão financeira, revisão shared e evidências reais.
+O scan renovado identificou também a retenção do grupo Flow Logs e a camada KMS opcional da sessão; ambos foram revisados individualmente e vinculados ao hash do arquivo correspondente. O gate usa o cenário sintético `security/dev-scan.tfvars` para avaliar os recursos Dev habilitados, com endereços expandidos exatos (incluindo os quatro grupos de logs). A avaliação de condicionais desligadas omitia parte dos checks. Esse arquivo é exclusivo do scanner e nunca é passado ao Terraform; flags reais continuam desligadas. O inventário completo de todos os blueprints permanece separado. A documentação AWS confirma que [KMS de sessão adiciona uma camada ao TLS padrão](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-preferences-enable-encryption.html). As três decisões de storage Dev foram reavaliadas após grants de multipart: permissões continuam nos prefixos próprios, sem DeleteObject/acesso à origem. Dump/commit/frescor e recuperação real exigem prova operacional.
+
+As exceções não dão autorização para apply. A identidade conectada encontrada em 27/10 era root; esta rodada só fez leituras/validação de policy. Respeitar a exceção de identidade expressamente autorizada na sessão privada, sem chaves permanentes ou credenciais no chat; sessão temporária no executor, revisão financeira/shared, CI protegido e evidências reais continuam obrigatórios.
 
 Referências: [PRD da fase](contracts/dev-infra-prd.md), [CloudTrail/SNS](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-permissions-for-sns-notifications.html), [permissões CI](dev-ci-permissions.md).

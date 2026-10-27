@@ -1,17 +1,28 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export function validateGithubReadiness({ repository, branch, environments, expectedRepository, operation, scope = 'dev' }) {
+export function validateGithubReadiness({ repository, branch, environments, expectedRepository, operation, scope = 'dev', mainReviewPolicy = null }) {
   if (!['plan', 'apply'].includes(operation)) throw new Error('Invalid operation');
   if (!['dev', 'shared', 'uat', 'prod'].includes(scope) || (scope !== 'dev' && operation !== 'plan')) throw new Error('Invalid scope/operation');
   if (repository.full_name !== expectedRepository || repository.visibility !== 'public' || repository.archived) {
     throw new Error('Expected active public infrastructure repository');
   }
+  let minimumMainApprovals = 1;
+  if (mainReviewPolicy !== null) {
+    if (mainReviewPolicy.repository !== expectedRepository || mainReviewPolicy.minimumApprovingReviews !== 0 ||
+        mainReviewPolicy.reason !== 'single-maintainer' || mainReviewPolicy.approvedBy !== 'FelipeTorresHora' ||
+        mainReviewPolicy.approvedOn !== '2026-10-27' || mainReviewPolicy.scope !== 'main-pull-request-review-only') {
+      throw new Error('Invalid main review exception');
+    }
+    minimumMainApprovals = 0;
+  }
   if (repository.default_branch !== 'main' || !branch?.required_status_checks?.strict ||
       !branch.required_status_checks.contexts.includes('Infra validation') ||
       !branch.required_status_checks.contexts.includes('Terraform security') ||
-      !branch.required_pull_request_reviews || branch.required_pull_request_reviews.required_approving_review_count < 1 ||
+      !branch.required_pull_request_reviews || !Number.isInteger(branch.required_pull_request_reviews.required_approving_review_count) ||
+      branch.required_pull_request_reviews.required_approving_review_count < minimumMainApprovals ||
       !branch.enforce_admins?.enabled || branch.allow_force_pushes?.enabled !== false || branch.allow_deletions?.enabled !== false) {
     throw new Error('Main branch protection and required checks are not ready');
   }
@@ -60,7 +71,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       environment.branches = (await github(`${base}/environments/${name}/deployment-branch-policies`)).branch_policies;
       return environment;
     }));
-    validateGithubReadiness({ repository: metadata, branch, environments, expectedRepository: repository, operation: process.argv[2], scope });
+    const mainReviewPolicy = JSON.parse(readFileSync(new URL('../security/main-review-policy.json', import.meta.url), 'utf8'));
+    validateGithubReadiness({ repository: metadata, branch, environments, expectedRepository: repository, operation: process.argv[2], scope, mainReviewPolicy });
     console.log('GitHub branch and environment protections verified before OIDC');
   } catch (error) {
     console.error('GitHub readiness blocked: ' + (error.stderr?.toString().trim() || error.message));

@@ -54,6 +54,11 @@ jobs:
           python-version: '3.12'
       - run: python tests/config-consumer.test.py
       - run: python tests/proxy-events.test.py
+      - run: python tests/dev-database-backup.test.py
+      - name: Synthetic PostgreSQL16 database backup and isolated recovery
+        env:
+          CHICO_DATABASE_INTEGRATION: 'true'
+        run: sudo --preserve-env=CHICO_DATABASE_INTEGRATION "$(command -v python)" tests/dev-database-backup-integration.py
   security:
     name: Terraform security
     runs-on: ubuntu-latest
@@ -74,8 +79,10 @@ jobs:
           for scope in bootstrap shared dev; do
             root="envs/$scope"
             if test "$scope" = bootstrap; then root=bootstrap; fi
+            scan_args=()
+            if test "$scope" = dev; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/dev-scan.tfvars"); fi
             code=0
-            checkov -d "$root" --framework terraform --quiet --skip-download -o json > "reports/checkov-$scope-scope.json" || code=$?
+            checkov -d "$root" --framework terraform --quiet --skip-download "${scan_args[@]}" -o json > "reports/checkov-$scope-scope.json" || code=$?
             test "$code" -le 1
             node scripts/security-gate.mjs "reports/checkov-$scope-scope.json" "$scope"
           done

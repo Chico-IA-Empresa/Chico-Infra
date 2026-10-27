@@ -1,5 +1,7 @@
 # Execução Dev — preparação local de 22/10/2026
 
+Atualização de execução fase 1: consultar [ondas e recuperação S3](phase1-execution.md) para issuer/chaves/review storage gerenciados, sink Dev, CPU Standard, capacidade até 80 GiB e backup real separado. Seções históricas abaixo não substituem as decisões/aprovações privadas atuais. Nenhuma prova AWS é inferida dos testes locais.
+
 Atualização de 27/10/2026: Felipe autorizou fechar a preparação local e do GitHub. Checks CI sem credenciais e leituras de metadados AWS estão incluídos; provisionamento/alteração AWS permanece uma etapa separada. O conector voltou a responder para leituras. Este runbook prepara a execução futura e não comprova infraestrutura provisionada. Estado vigente: [fechamento local/GitHub](local-github-status.md).
 
 ## 1. Reconciliar ownership antes de init autenticado

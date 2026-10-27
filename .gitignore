@@ -5,6 +5,7 @@
 *.tfvars.json
 !*.example.tfvars
 backend.hcl
+/bootstrap/backend.tf
 node_modules/
 reports/private/
 __pycache__/

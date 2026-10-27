@@ -11,14 +11,15 @@ const owned = { StringEquals: { 'aws:ResourceTag/project': 'chicoai', 'aws:Resou
 const creating = { StringEquals: { 'aws:RequestTag/project': 'chicoai', 'aws:RequestTag/env': 'dev', 'aws:RequestedRegion': 'sa-east-1' } };
 
 export function devInfraPolicies(i) {
-  const fields = ['account', 'stateBucket', 'reviewBucket', 'backupBucket', 'amiId', 'kmsKeyArns', 'vpcId', 'defaultSecurityGroupId'];
+  const fields = ['account', 'stateBucket', 'reviewBucket', 'backupBucket', 'accessLogBucket', 'amiId', 'kmsKeyArns', 'vpcId', 'defaultSecurityGroupId'];
   if (!i || typeof i !== 'object' || Array.isArray(i) || Object.keys(i).some(key => !fields.includes(key))) throw new Error('Only reviewed metadata fields are accepted');
   const exact = (value, pattern, name) => { if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`Invalid ${name}`); return value; };
   const account = exact(i.account, /^[0-9]{12}$/, 'account');
   const bucket = (name, prefix) => exact(name, new RegExp(`^${prefix}[a-z0-9-]{3,45}$`), 'bucket');
   const state = bucket(i.stateBucket, 'chico-tfstate-'), review = bucket(i.reviewBucket, 'chico-infra-review-');
   const backup = bucket(i.backupBucket, 'chico-dev-');
-  if (new Set([state, review, backup]).size !== 3) throw new Error('Separate state, review and backup buckets required');
+  const accessLogs = bucket(i.accessLogBucket, 'chico-dev-access-');
+  if (new Set([state, review, backup, accessLogs]).size !== 4) throw new Error('Separate state, review, backup and access-log buckets required');
   const ami = exact(i.amiId, /^ami-[a-f0-9]{17}$/, 'AMI');
   if (!Array.isArray(i.kmsKeyArns) || !i.kmsKeyArns.length) throw new Error('Reviewed KMS keys required');
   i.kmsKeyArns.forEach(arn => exact(arn, new RegExp(`^arn:aws:kms:sa-east-1:${account}:key/[a-f0-9-]{36}$`), 'KMS key'));
@@ -47,7 +48,7 @@ export function devInfraPolicies(i) {
     allow('ReadDevState', ['s3:GetObject'], `arn:aws:s3:::${state}/dev/terraform.tfstate`),
     allow('DevStateLock', ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], `arn:aws:s3:::${state}/dev/terraform.tfstate.tflock`),
     allow('ReviewBucketChecks', ['s3:GetBucketPublicAccessBlock', 's3:GetBucketVersioning'], `arn:aws:s3:::${review}`),
-    allow('BackupConfiguration', ['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketTagging', 's3:GetBucketPublicAccessBlock', 's3:GetBucketOwnershipControls', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:GetBucketLogging', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketRequestPayment'], `arn:aws:s3:::${backup}`),
+    allow('BackupConfiguration', ['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketTagging', 's3:GetBucketPublicAccessBlock', 's3:GetBucketOwnershipControls', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:GetBucketLogging', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketRequestPayment'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
     allow('LogGroupsMetadata', ['logs:DescribeLogGroups'], '*', region),
     allow('DevLogMetadata', ['logs:ListTagsForResource'], logs, region),
     allow('AlarmMetadata', ['cloudwatch:DescribeAlarms'], '*', region),
@@ -79,7 +80,7 @@ export function devInfraPolicies(i) {
     allow('ManageRuntimeProfile', ['iam:CreateInstanceProfile', 'iam:TagInstanceProfile', 'iam:UntagInstanceProfile', 'iam:AddRoleToInstanceProfile', 'iam:RemoveRoleFromInstanceProfile'], `arn:aws:iam::${account}:instance-profile/chico/dev/chico-dev-runtime`),
     allow('PassRuntimeToEc2', ['iam:PassRole'], runtime, { StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' } }),
     allow('PassFlowToVpc', ['iam:PassRole'], flow, { StringEquals: { 'iam:PassedToService': 'vpc-flow-logs.amazonaws.com' } }),
-    allow('ManageBackupConfiguration', ['s3:CreateBucket', 's3:PutBucketPolicy', 's3:PutBucketTagging', 's3:PutBucketPublicAccessBlock', 's3:PutBucketOwnershipControls', 's3:PutBucketVersioning', 's3:PutEncryptionConfiguration', 's3:PutLifecycleConfiguration', 's3:PutBucketLogging'], `arn:aws:s3:::${backup}`),
+    allow('ManageBackupConfiguration', ['s3:CreateBucket', 's3:PutBucketPolicy', 's3:PutBucketTagging', 's3:PutBucketPublicAccessBlock', 's3:PutBucketOwnershipControls', 's3:PutBucketVersioning', 's3:PutEncryptionConfiguration', 's3:PutLifecycleConfiguration', 's3:PutBucketLogging'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
     allow('ManageDevLogGroups', ['logs:CreateLogGroup', 'logs:PutRetentionPolicy', 'logs:AssociateKmsKey', 'logs:TagResource', 'logs:UntagResource'], logs, region),
     allow('ManageDevAlarms', ['cloudwatch:PutMetricAlarm', 'cloudwatch:DeleteAlarms', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], `arn:aws:cloudwatch:sa-east-1:${account}:alarm:chico-dev-*`, region),
     allow('ManageSecretMetadata', ['secretsmanager:CreateSecret', 'secretsmanager:UpdateSecret', 'secretsmanager:TagResource', 'secretsmanager:UntagResource'], secret, region),
@@ -92,8 +93,8 @@ export function devInfraPolicies(i) {
     allow('PullSharedImages', ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'], repos, region),
     allow('DevLogs', ['logs:CreateLogStream', 'logs:DescribeLogStreams', 'logs:PutLogEvents'], `${logs}:*`, region),
     allow('DevMetrics', ['cloudwatch:PutMetricData'], '*', { StringEquals: { ...region.StringEquals, 'cloudwatch:namespace': 'Chico/Dev' } }),
-    allow('DevBackupListing', ['s3:ListBucket'], `arn:aws:s3:::${backup}`, { StringLike: { 's3:prefix': ['dev/fixtures/*'] } }),
-    allow('DevBackupObjects', ['s3:GetObject', 's3:PutObject'], `arn:aws:s3:::${backup}/dev/fixtures/*`),
+    allow('DevBackupListing', ['s3:ListBucket'], `arn:aws:s3:::${backup}`, { StringLike: { 's3:prefix': ['dev/fixtures/*', 'dev/database/*'] } }),
+    allow('DevBackupObjects', ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'], ['fixtures', 'database'].map(prefix => `arn:aws:s3:::${backup}/dev/${prefix}/*`)),
     allow('DevSecrets', ['secretsmanager:GetSecretValue'], secret, region),
     allow('DevSecretKeys', ['kms:Decrypt'], i.kmsKeyArns, { StringEquals: { 'kms:ViaService': 'secretsmanager.sa-east-1.amazonaws.com' }, StringLike: { 'kms:EncryptionContext:SecretARN': secret } }),
     allow('DevNonSecretParameters', ['ssm:GetParameters'], parameter, region),

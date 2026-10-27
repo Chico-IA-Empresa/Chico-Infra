@@ -1,4 +1,8 @@
 mock_provider "aws" {
+  mock_resource "aws_s3_bucket" {
+    override_during = plan
+    defaults        = { arn = "arn:aws:s3:::chico-dev-synthetic-fixture" }
+  }
   mock_data "aws_ami" {
     defaults = { architecture = "arm64", state = "available", name = "al2023-ami-2023.10-kernel-6.1-arm64" }
   }
@@ -19,20 +23,27 @@ run "disabled_by_default" {
 run "host_integration" {
   command = plan
   variables {
-    provision_enabled             = true
-    permissions_boundary_arns     = { runtime = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-runtime-boundary", flow = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-flow-boundary" }
-    compute_enabled               = true
-    credit_approval               = { account_id = "123456789012", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
-    ami_id                        = "ami-0123456789abcdef0"
-    compose_version               = "v5.6.0"
-    backup_bucket_name            = "chico-dev-synthetic-fixture"
-    fixture_backup_retention_days = 7
-    access_log_bucket_name        = "chico-dev-access-synthetic-fixture"
-    parameters                    = { "api/FIXTURE_MODE" = "synthetic" }
-    logs_key_arn                  = "arn:aws:kms:sa-east-1:123456789012:key/synthetic-fixture"
-    alarm_topic_arn               = "arn:aws:sns:sa-east-1:123456789012:chico-dev-synthetic"
-    compose_sha256                = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    repository_arns               = ["arn:aws:ecr:sa-east-1:123456789012:repository/chico-api", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-workers", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-frontend"]
+    provision_enabled              = true
+    permissions_boundary_arns      = { runtime = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-runtime-boundary", flow = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-flow-boundary" }
+    compute_enabled                = true
+    credit_approval                = { account_id = "123456789012", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+    ami_id                         = "ami-0123456789abcdef0"
+    compose_version                = "v5.6.0"
+    backup_bucket_name             = "chico-dev-synthetic-fixture"
+    fixture_backup_retention_days  = 7
+    database_backup_retention_days = 14
+    manage_access_log_sink         = true
+    root_volume_size_gib           = 80
+    access_log_bucket_name         = "chico-dev-access-synthetic-fixture"
+    parameters                     = { "api/FIXTURE_MODE" = "synthetic" }
+    logs_key_arn                   = "arn:aws:kms:sa-east-1:123456789012:key/synthetic-fixture"
+    alarm_topic_arn                = "arn:aws:sns:sa-east-1:123456789012:chico-dev-synthetic"
+    compose_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    repository_arns                = ["arn:aws:ecr:sa-east-1:123456789012:repository/chico-api", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-workers", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-frontend"]
+  }
+  assert {
+    condition     = length(module.backup_access_logs) == 1 && output.database_backup.prefix == "dev/database/" && output.database_backup.retention_days == 14 && length(aws_s3_bucket_lifecycle_configuration.backup[0].rule) == 2 && !strcontains(aws_iam_role_policy.backup[0].policy, "chico-backup") && !strcontains(aws_iam_role_policy.backup[0].policy, "s3:DeleteObject")
+    error_message = "Backups reais devem ter prefixo/retenção próprios, sem escrita/leitura da origem legada nem exclusão runtime."
   }
   assert {
     condition     = length(module.dev_box) == 1 && length(aws_iam_instance_profile.runtime) == 1 && length(module.network) == 1

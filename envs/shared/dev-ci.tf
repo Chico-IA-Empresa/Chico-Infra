@@ -34,6 +34,7 @@ resource "aws_iam_policy" "dev_infra" {
         var.oidc_bindings[each.value.role].scope == "dev" &&
         var.oidc_bindings[each.value.role].repository == "Chico-IA-Empresa/Chico-Infra" &&
         var.oidc_bindings[each.value.role].environment == (each.value.role == "ci-plan-dev" ? "infra-plan-dev" : "infra-apply-dev") &&
+        var.oidc_bindings[each.value.role].state_access &&
         var.oidc_bindings[each.value.role].writable_state == (each.value.role != "ci-plan-dev"), false
       )
       error_message = "Policy até 6144 caracteres e binding Dev do Chico-Infra com Environment/state segregados são obrigatórios."

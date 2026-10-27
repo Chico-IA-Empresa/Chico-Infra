@@ -1,0 +1,8 @@
+{
+  "repository": "Chico-IA-Empresa/Chico-Infra",
+  "minimumApprovingReviews": 0,
+  "reason": "single-maintainer",
+  "approvedBy": "FelipeTorresHora",
+  "approvedOn": "2026-10-27",
+  "scope": "main-pull-request-review-only"
+}

@@ -1,4 +1,12 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  override_during = plan
+  mock_resource "aws_kms_key" {
+    defaults = { arn = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111" }
+  }
+  mock_resource "aws_s3_bucket" {
+    defaults = { arn = "arn:aws:s3:::chico-infra-review-synthetic" }
+  }
+}
 variables {
   account_id                   = "123456789012"
   owner                        = "local-fixture"
@@ -51,4 +59,37 @@ run "reject_plan_writable_state_and_foreign_repo" {
     }
   }
   expect_failures = [aws_iam_policy.dev_infra["plan"]]
+}
+run "initial_shared_foundation_without_vpc_grants" {
+  command = plan
+  variables {
+    provision_enabled             = true
+    foundation_enabled            = true
+    audit_kms_key_arn             = null
+    oidc_provider_arn             = null
+    dev_ci_policy_documents       = null
+    review_bucket_name            = "chico-infra-review-synthetic"
+    review_access_log_bucket_name = "chico-review-access-synthetic"
+    credit_approval               = { account_id = "123456789012", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+  }
+  assert {
+    condition     = length(aws_kms_key.foundation) == 4 && alltrue([for key in aws_kms_key.foundation : key.enable_key_rotation && key.deletion_window_in_days == 30]) && length(aws_iam_policy.dev_infra) == 0
+    error_message = "Foundation precisa de quatro CMKs protegidas, sem grants dependentes de VPC ainda inexistente."
+  }
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && aws_iam_openid_connect_provider.github[0].client_id_list == toset(["sts.amazonaws.com"])
+    error_message = "Shared deve criar um único issuer GitHub com audience exata."
+  }
+  assert {
+    condition     = jsondecode(aws_kms_key.foundation["logs"].policy).Statement[1].Condition.ArnEquals["kms:EncryptionContext:aws:logs:arn"] == local.log_contexts.logs && jsondecode(aws_kms_key.foundation["alerts"].policy).Statement[1].Condition.ArnEquals["aws:SourceArn"] == local.dev_alarm_arns
+    error_message = "Logs e alarmes não podem usar principals/contextos de outros ambientes."
+  }
+  assert {
+    condition     = aws_s3_bucket_public_access_block.review[0].restrict_public_buckets && aws_s3_bucket_versioning.review[0].versioning_configuration[0].status == "Enabled" && one(aws_s3_bucket_server_side_encryption_configuration.review[0].rule).apply_server_side_encryption_by_default[0].sse_algorithm == "AES256" && aws_s3_bucket_logging.review[0].target_prefix == "access/review/"
+    error_message = "Planos reais exigem bucket privado, versionado, AES256 compatível com workflow e logging correto."
+  }
+  assert {
+    condition     = length(aws_sns_topic_subscription.dev_operations) == 1 && jsondecode(aws_sns_topic_policy.dev_operations[0].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == local.dev_alarm_arns
+    error_message = "Alertas exigem destino definido e publicação limitada aos alarmes Dev autorizados."
+  }
 }

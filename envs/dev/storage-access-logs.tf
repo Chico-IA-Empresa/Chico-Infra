@@ -7,10 +7,28 @@ variable "access_log_bucket_name" {
     error_message = "Destino de acesso exclusivo Dev revisado obrigatório; não reutilizar legado/state."
   }
 }
+variable "manage_access_log_sink" {
+  description = "Give the dedicated Dev sink explicit ownership in this root, after inventory and financial review."
+  type        = bool
+  default     = false
+}
+module "backup_access_logs" {
+  count             = local.host_enabled && var.manage_access_log_sink ? 1 : 0
+  source            = "../../modules/access-log-sink"
+  bucket_name       = var.access_log_bucket_name
+  source_bucket_arn = "arn:aws:s3:::${var.backup_bucket_name}"
+  account_id        = var.account_id
+  retention_days    = 30
+  delivery_prefix   = "dev/backup-access/"
+  depends_on        = [module.funding]
+}
+locals {
+  backup_access_log_destination = local.host_enabled && var.manage_access_log_sink ? module.backup_access_logs[0].bucket_name : var.access_log_bucket_name
+}
 resource "aws_s3_bucket_logging" "backup" {
   count         = local.host_enabled ? 1 : 0
   bucket        = aws_s3_bucket.backup[0].id
-  target_bucket = var.access_log_bucket_name
+  target_bucket = local.backup_access_log_destination
   target_prefix = "dev/backup-access/"
   lifecycle {
     precondition {
