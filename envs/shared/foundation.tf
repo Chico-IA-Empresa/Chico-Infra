@@ -54,8 +54,14 @@ resource "aws_kms_key" "foundation" {
     local.key_statements[each.key],
     contains(keys(local.log_contexts), each.key) ? [{
       Sid       = "RegionalLogEncryption", Effect = "Allow", Principal = { Service = "logs.sa-east-1.amazonaws.com" },
-      Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"], Resource = "*",
-      Condition = { ArnEquals = { "kms:EncryptionContext:aws:logs:arn" = local.log_contexts[each.key] } }
+      Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*"], Resource = "*",
+      Condition = { StringEquals = { "kms:EncryptionContext:aws:logs:arn" = local.log_contexts[each.key] } }
+    }] : [],
+    contains(keys(local.log_contexts), each.key) ? [{
+      # DescribeKey has no encryption context. This service-only statement permits
+      # metadata on this key; cryptographic use still requires the exact log ARN.
+      Sid    = "RegionalLogKeyMetadata", Effect = "Allow", Principal = { Service = "logs.sa-east-1.amazonaws.com" },
+      Action = ["kms:DescribeKey"], Resource = "*"
     }] : []
   ) })
   lifecycle {

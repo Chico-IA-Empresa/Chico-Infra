@@ -85,8 +85,17 @@ run "initial_shared_foundation_without_vpc_grants" {
     error_message = "Shared deve criar um único issuer GitHub com audience exata."
   }
   assert {
-    condition     = jsondecode(aws_kms_key.foundation["logs"].policy).Statement[1].Condition.ArnEquals["kms:EncryptionContext:aws:logs:arn"] == local.log_contexts.logs && jsondecode(aws_kms_key.foundation["alerts"].policy).Statement[1].Condition.ArnEquals["aws:SourceArn"] == local.dev_alarm_arns
+    condition     = jsondecode(aws_kms_key.foundation["logs"].policy).Statement[1].Condition.StringEquals["kms:EncryptionContext:aws:logs:arn"] == local.log_contexts.logs && jsondecode(aws_kms_key.foundation["alerts"].policy).Statement[1].Condition.ArnEquals["aws:SourceArn"] == local.dev_alarm_arns
     error_message = "Logs e alarmes não podem usar principals/contextos de outros ambientes."
+  }
+  assert {
+    condition = alltrue([for name in ["audit", "logs"] : alltrue([
+      for statement in jsondecode(aws_kms_key.foundation[name].policy).Statement :
+      statement.Sid == "RegionalLogEncryption" ? !contains(statement.Action, "kms:DescribeKey") && keys(statement.Condition) == ["StringEquals"] : (
+        statement.Sid == "RegionalLogKeyMetadata" ? statement.Action == ["kms:DescribeKey"] && statement.Principal.Service == "logs.sa-east-1.amazonaws.com" && !can(statement.Condition) : true
+      )
+    ])])
+    error_message = "DescribeKey não aceita encryption context; somente o serviço regional pode ler metadados, e operações criptográficas continuam delimitadas pelo log ARN."
   }
   assert {
     condition     = aws_s3_bucket_public_access_block.review[0].restrict_public_buckets && aws_s3_bucket_versioning.review[0].versioning_configuration[0].status == "Enabled" && one(aws_s3_bucket_server_side_encryption_configuration.review[0].rule).apply_server_side_encryption_by_default[0].sse_algorithm == "AES256" && aws_s3_bucket_logging.review[0].target_prefix == "access/review/"
