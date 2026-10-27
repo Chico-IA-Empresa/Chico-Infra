@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateGithubReadiness, normalizeBranchProtection } from '../scripts/github-readiness.mjs';
+import { validateGithubReadiness } from '../scripts/github-readiness.mjs';
 
 const ready = {
   expectedRepository: 'Chico-IA-Empresa/Chico-Infra', operation: 'plan',
@@ -50,12 +50,4 @@ test('shared/UAT/Prod plan requires its own protected environment', () => {
     assert.equal(validateGithubReadiness(context), true);
     assert.throws(() => validateGithubReadiness({ ...context, operation: 'apply' }), /scope/);
   }
-});
-test('normalizes actual public GraphQL protection fields without dropping enforcement', () => {
-  const branch = normalizeBranchProtection([{ pattern: 'main', isAdminEnforced: true, requiresStatusChecks: true, requiresStrictStatusChecks: true, requiredStatusCheckContexts: ['Infra validation', 'Terraform security'], requiresApprovingReviews: true, requiredApprovingReviewCount: 1, allowsForcePushes: false, allowsDeletions: false }]);
-  assert.equal(validateGithubReadiness({ ...ready, branch }), true);
-  assert.throws(() => validateGithubReadiness({ ...ready, branch: { ...branch, enforce_admins: { enabled: false } } }));
-});
-test('absent or ambiguous exact main protection is not inferred from a wildcard rule', () => {
-  for (const rules of [[], [{ pattern: '*' }], [{ pattern: 'main' }, { pattern: 'main' }]]) assert.throws(() => normalizeBranchProtection(rules));
 });

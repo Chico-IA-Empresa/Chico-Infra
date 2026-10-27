@@ -37,7 +37,7 @@ jobs:
           node-version: '24'
       - name: Verify required GitHub protections before requesting credentials
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
           OPERATION: ${{ inputs.operation }}
         run: node scripts/github-readiness.mjs "$OPERATION"
   execute:

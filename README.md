@@ -2,7 +2,7 @@
 
 ## Repositório público — atualização de 27/10/2026
 
-Felipe tornou o repositório público para liberar as proteções do GitHub Free. O preflight agora verifica metadados públicos sem token administrativo. Planos, state, inputs reais, segredos e relatórios privados continuam fora do Git e de artifacts públicos. O provisionamento permanece desabilitado até os requisitos AWS/financeiros serem satisfeitos. O histórico abaixo registra o estado anterior à mudança de visibilidade; consultar [governança pública](docs/public-repository-governance.md) para o estado atual.
+Felipe tornou o repositório público para liberar as proteções do GitHub Free. O preflight aceita a nova visibilidade e preserva o token de governança somente leitura para inspecionar as políticas de branch. Planos, state, inputs reais, segredos e relatórios privados continuam fora do Git e de artifacts públicos. O provisionamento permanece desabilitado até os requisitos AWS/financeiros serem satisfeitos. O histórico abaixo registra o estado anterior à mudança de visibilidade; consultar [governança pública](docs/public-repository-governance.md) para o estado atual.
 
 ## Estado atual — 27/10/2026
 

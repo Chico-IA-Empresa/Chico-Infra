@@ -39,28 +39,11 @@ async function github(path) {
   return response.json();
 }
 
-export function normalizeBranchProtection(rules) {
-  const exact = rules.filter(rule => rule.pattern === 'main');
-  if (exact.length !== 1) throw new Error('Exactly one main branch protection rule is required');
-  const rule = exact[0];
-  return {
-    required_status_checks: { strict: rule.requiresStrictStatusChecks, contexts: rule.requiresStatusChecks ? rule.requiredStatusCheckContexts : [] },
-    required_pull_request_reviews: rule.requiresApprovingReviews ? { required_approving_review_count: rule.requiredApprovingReviewCount } : null,
-    enforce_admins: { enabled: rule.isAdminEnforced },
-    allow_force_pushes: { enabled: rule.allowsForcePushes },
-    allow_deletions: { enabled: rule.allowsDeletions },
-  };
-}
-
 function readBranchProtection() {
-  // REST protection details require Administration:read even for public repos.
-  // Public GraphQL governance metadata works with the standard read-only job
-  // token. gh handles credentials internally; no token is returned or logged.
-  const query = '{repository(owner:"Chico-IA-Empresa",name:"Chico-Infra"){branchProtectionRules(first:100){pageInfo{hasNextPage} nodes{pattern isAdminEnforced requiresStatusChecks requiresStrictStatusChecks requiredStatusCheckContexts requiresApprovingReviews requiredApprovingReviewCount allowsForcePushes allowsDeletions}}}}';
-  const result = JSON.parse(execFileSync('gh', ['api', 'graphql', '-f', `query=${query}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000 }));
-  const rules = result.data?.repository?.branchProtectionRules;
-  if (!rules || rules.pageInfo.hasNextPage) throw new Error('Incomplete branch protection metadata');
-  return normalizeBranchProtection(rules.nodes);
+  // Even public branch protection details require Administration:read. Use the
+  // dedicated read-only governance credential; never substitute an admin-write
+  // token or treat an inaccessible policy as valid. gh never logs credentials.
+  return JSON.parse(execFileSync('gh', ['api', 'repos/Chico-IA-Empresa/Chico-Infra/branches/main/protection'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000 }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
