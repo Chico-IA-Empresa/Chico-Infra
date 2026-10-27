@@ -5,8 +5,8 @@ import { pathToFileURL } from 'node:url';
 export function validateGithubReadiness({ repository, branch, environments, expectedRepository, operation, scope = 'dev' }) {
   if (!['plan', 'apply'].includes(operation)) throw new Error('Invalid operation');
   if (!['dev', 'shared', 'uat', 'prod'].includes(scope) || (scope !== 'dev' && operation !== 'plan')) throw new Error('Invalid scope/operation');
-  if (repository.full_name !== expectedRepository || repository.visibility !== 'private' || repository.archived) {
-    throw new Error('Expected active private infrastructure repository');
+  if (repository.full_name !== expectedRepository || repository.visibility !== 'public' || repository.archived) {
+    throw new Error('Expected active public infrastructure repository');
   }
   if (repository.default_branch !== 'main' || !branch?.required_status_checks?.strict ||
       !branch.required_status_checks.contexts.includes('Infra validation') ||
@@ -28,8 +28,22 @@ export function validateGithubReadiness({ repository, branch, environments, expe
   return true;
 }
 
-function github(path) {
-  return JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+async function github(path) {
+  // Governance metadata is public. No administrative token is needed, and AWS
+  // credentials/OIDC are still unavailable until this entire preflight succeeds.
+  const response = await fetch(`https://api.github.com/${path}`, {
+    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error(`GitHub metadata unavailable (${response.status}): ${path}`);
+  return response.json();
+}
+
+function readBranchProtection() {
+  // Even public branch protection details require Administration:read. Use the
+  // dedicated read-only governance credential; never substitute an admin-write
+  // token or treat an inaccessible policy as valid. gh never logs credentials.
+  return JSON.parse(execFileSync('gh', ['api', 'repos/Chico-IA-Empresa/Chico-Infra/branches/main/protection'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000 }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -37,15 +51,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const repository = process.env.GITHUB_REPOSITORY;
     if (repository !== 'Chico-IA-Empresa/Chico-Infra') throw new Error('Unexpected repository');
     const base = `repos/${repository}`;
-    const metadata = github(base);
-    const branch = github(`${base}/branches/main/protection`);
+    const metadata = await github(base);
+    const branch = readBranchProtection();
     const scope = process.argv[3] ?? 'dev';
     const names = scope === 'dev' ? ['infra-plan-dev', 'infra-apply-dev'] : [`infra-plan-${scope}`];
-    const environments = names.map(name => {
-      const environment = github(`${base}/environments/${name}`);
-      environment.branches = github(`${base}/environments/${name}/deployment-branch-policies`).branch_policies;
+    const environments = await Promise.all(names.map(async name => {
+      const environment = await github(`${base}/environments/${name}`);
+      environment.branches = (await github(`${base}/environments/${name}/deployment-branch-policies`)).branch_policies;
       return environment;
-    });
+    }));
     validateGithubReadiness({ repository: metadata, branch, environments, expectedRepository: repository, operation: process.argv[2], scope });
     console.log('GitHub branch and environment protections verified before OIDC');
   } catch (error) {

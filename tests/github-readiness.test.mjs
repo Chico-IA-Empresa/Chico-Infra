@@ -4,7 +4,7 @@ import { validateGithubReadiness } from '../scripts/github-readiness.mjs';
 
 const ready = {
   expectedRepository: 'Chico-IA-Empresa/Chico-Infra', operation: 'plan',
-  repository: { full_name: 'Chico-IA-Empresa/Chico-Infra', visibility: 'private', archived: false, default_branch: 'main' },
+  repository: { full_name: 'Chico-IA-Empresa/Chico-Infra', visibility: 'public', archived: false, default_branch: 'main' },
   branch: {
     required_status_checks: { strict: true, contexts: ['Infra validation', 'Terraform security'] },
     required_pull_request_reviews: { required_approving_review_count: 1 },
@@ -20,7 +20,7 @@ const ready = {
 test('accepts complete verified protections before plan or apply', () => {
   for (const operation of ['plan', 'apply']) assert.equal(validateGithubReadiness({ ...ready, operation }), true);
 });
-test('blocks absent Free-plan protections and missing security check', () => {
+test('blocks absent protections, missing security check and visibility drift', () => {
   for (const mutate of [
     c => { c.branch = null; },
     c => { c.environments = []; },
@@ -28,7 +28,7 @@ test('blocks absent Free-plan protections and missing security check', () => {
     c => { c.branch.enforce_admins.enabled = false; },
     c => { c.branch.allow_force_pushes.enabled = true; },
     c => { c.branch.required_pull_request_reviews.required_approving_review_count = 0; },
-    c => { c.repository.visibility = 'public'; },
+    c => { c.repository.visibility = 'private'; },
   ]) { const changed = structuredClone(ready); mutate(changed); assert.throws(() => validateGithubReadiness(changed)); }
 });
 test('blocks bypass, self review, tag deployments and extra branches on either environment', () => {
