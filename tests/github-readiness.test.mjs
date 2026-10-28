@@ -78,3 +78,63 @@ test('main review exception rejects another repository, scope or undocumented de
     assert.throws(() => validateGithubReadiness({ ...context, mainReviewPolicy: { ...context.mainReviewPolicy, ...change } }));
   }
 });
+
+function withDevReviewException() {
+  const context = structuredClone(ready);
+  context.devEnvironmentReviewPolicy = JSON.parse(readFileSync(new URL('../security/dev-environment-review-policy.json', import.meta.url), 'utf8'));
+  for (const environment of context.environments) {
+    environment.protection_rules[0].prevent_self_review = false;
+    environment.protection_rules[0].reviewers = context.devEnvironmentReviewPolicy.reviewers.map(({ type, id }) => ({ type, reviewer: { id } }));
+  }
+  return context;
+}
+
+test('explicit Dev exception allows manual self approval for every listed collaborator', () => {
+  for (const operation of ['plan', 'apply']) {
+    const context = withDevReviewException();
+    context.operation = operation;
+    assert.equal(validateGithubReadiness(context), true);
+  }
+});
+
+test('Dev exception still requires manual approval, exact reviewers, no bypass and main only', () => {
+  for (const index of [0, 1]) for (const mutate of [
+    e => { e.protection_rules = []; },
+    e => { e.protection_rules[0].reviewers = []; },
+    e => { e.protection_rules[0].reviewers.pop(); },
+    e => { e.protection_rules[0].reviewers.push({ type: 'User', reviewer: { id: 999 } }); },
+    e => { e.protection_rules[0].reviewers[0].type = 'Team'; },
+    e => { e.protection_rules[0].prevent_self_review = true; },
+    e => { e.can_admins_bypass = true; },
+    e => { e.branches.push({ name: '*', type: 'branch' }); },
+    e => { e.deployment_branch_policy.custom_branch_policies = false; },
+  ]) {
+    const context = withDevReviewException();
+    mutate(context.environments[index]);
+    assert.throws(() => validateGithubReadiness(context));
+  }
+});
+
+test('Dev exception rejects missing authorization, invalid scope or disabled manual review', () => {
+  for (const change of [
+    { repository: 'other/repo' }, { scope: 'all-environments' }, { reason: '' }, { approvedBy: '' }, { approvedOn: '' },
+    { preventSelfReview: true }, { manualApprovalRequired: false }, { reviewerSelection: 'any-public-user' },
+    { reviewers: [] }, { reviewers: [{ type: 'User', id: 0, login: 'bad' }] },
+    { reviewers: [{ type: 'User', id: 1, login: 'same' }, { type: 'User', id: 1, login: 'duplicate' }] },
+  ]) {
+    const context = withDevReviewException();
+    Object.assign(context.devEnvironmentReviewPolicy, change);
+    assert.throws(() => validateGithubReadiness(context));
+  }
+});
+
+test('Dev approval exception does not relax shared, UAT or Prod self review prevention', () => {
+  for (const scope of ['shared', 'uat', 'prod']) {
+    const context = withDevReviewException();
+    context.scope = scope;
+    context.environments = [{ ...context.environments[0], name: `infra-plan-${scope}` }];
+    assert.throws(() => validateGithubReadiness(context), /environment/);
+    context.environments[0].protection_rules[0].prevent_self_review = true;
+    assert.equal(validateGithubReadiness(context), true);
+  }
+});
