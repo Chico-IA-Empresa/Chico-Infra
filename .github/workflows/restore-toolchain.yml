@@ -1,0 +1,81 @@
+name: Restore toolchain synthetic checks
+on:
+  pull_request:
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - .github/workflows/restore-toolchain.yml
+  push:
+    branches: [main]
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - .github/workflows/restore-toolchain.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-toolchain-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    name: PG16 pgBackRest synthetic recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Offline parser and isolation contracts
+        run: |
+          python tests/restore-toolchain.test.py
+          bash -n operations/restore-toolchain/fixture_prepare.sh
+      - name: Build immutable-source amd64 toolchain without AWS credentials
+        run: |
+          set -euo pipefail
+          docker build --platform=linux/amd64 --pull --tag chico-restore-toolchain:synthetic operations/restore-toolchain
+          docker image inspect chico-restore-toolchain:synthetic --format '{{.Id}}' > "$RUNNER_TEMP/restore-toolchain-image-id"
+      - name: Real binary encrypted full/diff verify, corruption rejection and isolated recovery
+        run: |
+          set -euo pipefail
+          sudo "$(command -v python)" tests/restore-toolchain-integration.py \
+            --image "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
+            --evidence "$RUNNER_TEMP/restore-toolchain-evidence"
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.67.2
+          cache: false
+      - name: Known vulnerability inventory; critical findings block
+        run: |
+          set -euo pipefail
+          trivy version --format json > "$RUNNER_TEMP/restore-toolchain-evidence/scanner.json"
+          trivy image --scanners vuln --format json \
+            --output "$RUNNER_TEMP/restore-toolchain-evidence/scan.json" chico-restore-toolchain:synthetic
+          python - "$RUNNER_TEMP/restore-toolchain-evidence/scan.json" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          assert report.get('SchemaVersion') == 2 and report.get('Results'), 'Unknown scan report'
+          vulnerabilities = [v for result in report['Results'] for v in result.get('Vulnerabilities', [])]
+          assert not any(v.get('Severity') == 'CRITICAL' for v in vulnerabilities), 'Critical findings require remediation/review'
+          print(json.dumps({'scanCompleted': True, 'criticalFindings': 0,
+                            'highFindings': sum(v.get('Severity') == 'HIGH' for v in vulnerabilities),
+                            'realRestoreApproved': False}))
+          PY
+      - name: Publish only synthetic summary, package/binary provenance and scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: restore-toolchain-synthetic-evidence
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/restore-toolchain-evidence/summary.json
+            ${{ runner.temp }}/restore-toolchain-evidence/provenance.txt
+            ${{ runner.temp }}/restore-toolchain-evidence/scan.json
+            ${{ runner.temp }}/restore-toolchain-evidence/scanner.json
+            ${{ runner.temp }}/restore-toolchain-evidence/verify-0.txt
+            ${{ runner.temp }}/restore-toolchain-evidence/verify-1.txt
+            ${{ runner.temp }}/restore-toolchain-evidence/verify-corrupt.txt
