@@ -36,6 +36,8 @@ jobs:
       - name: Build immutable-source amd64 toolchain without AWS credentials
         run: |
           set -euo pipefail
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
+          sha256sum operations/restore-toolchain/runner-ca.crt > "$RUNNER_TEMP/restore-toolchain-runner-ca.sha256"
           docker build --platform=linux/amd64 --pull --tag chico-restore-toolchain:synthetic operations/restore-toolchain
           docker image inspect chico-restore-toolchain:synthetic --format '{{.Id}}' > "$RUNNER_TEMP/restore-toolchain-image-id"
       - name: Real binary encrypted full/diff verify, corruption rejection and isolated recovery
@@ -89,3 +91,4 @@ jobs:
             ${{ runner.temp }}/restore-toolchain-evidence/verify-0.txt
             ${{ runner.temp }}/restore-toolchain-evidence/verify-1.txt
             ${{ runner.temp }}/restore-toolchain-evidence/verify-corrupt.txt
+            ${{ runner.temp }}/restore-toolchain-runner-ca.sha256

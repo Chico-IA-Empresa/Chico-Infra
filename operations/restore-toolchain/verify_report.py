@@ -15,7 +15,60 @@ BACKUP = re.compile(r"  backup: (\S+), status: (valid), total files checked: ([0
 ERRORS = re.compile(r"    missing: ([0-9]+), checksum invalid: ([0-9]+), size invalid: ([0-9]+), other: ([0-9]+)")
 
 
-def parse_report(text, *, stanza, labels):
+def validate_diagnostics(text, report_text, labels):
+    """Reject fallback/missing metadata diagnostics hidden by a successful summary.
+
+    Source: pinned verify.c and common/log.c. stderr omits timestamp/PID; only
+    command begin, healthy WAL range DETAILs, the exact summary, and successful
+    command end are accepted. Never return private diagnostic lines on failure.
+    """
+    lines = text.splitlines()
+    if len(lines) < 4 or not lines[0].startswith("INFO: verify command begin 2.57.0: "):
+        raise ValueError("Version-bound detailed diagnostics required")
+    begin = lines[0]
+    if any(option not in begin for option in ["--log-level-stderr=detail", "--log-level-console=off", "--output=text", "--verbose"]):
+        raise ValueError("Incomplete diagnostic capture")
+    if len(labels) != 1 or not re.search(r"(?:^| )--set=" + re.escape(labels[0]) + r"(?: |$)", begin):
+        raise ValueError("Diagnostic label differs from reviewed command")
+    if not re.fullmatch(r"INFO: verify command end: completed successfully(?: \([0-9]+ms\))?", lines[-1]):
+        raise ValueError("Unsuccessful or incomplete diagnostic footer")
+    expected = ("INFO: " + report_text.rstrip("\r\n").replace("\r\n", "\n").replace("\n", "\n      ")).splitlines()
+    summary_indexes = [index for index, line in enumerate(lines) if line == expected[0]]
+    if len(summary_indexes) != 1:
+        raise ValueError("Exactly one diagnostic summary required")
+    summary_start = summary_indexes[0]
+    summary_end = summary_start + len(expected)
+    if summary_start <= 1 or lines[summary_start:summary_end] != expected:
+        raise ValueError("Diagnostic summary differs from stdout")
+    healthy = re.compile(r"DETAIL: archiveId: 16-[1-9][0-9]*, wal start: [0-9A-F]{24}, wal stop: [0-9A-F]{24}")
+    details = lines[1:summary_start] + lines[summary_end:-1]
+    wal_ranges = 0
+    for line in details:
+        if healthy.fullmatch(line):
+            wal_ranges += 1
+        elif line.startswith("DETAIL: statistics: "):
+            # command.c emits nonnegative counters after the report, before command end.
+            try:
+                statistics = json.loads(line.removeprefix("DETAIL: statistics: "))
+            except json.JSONDecodeError:
+                raise ValueError("Unrecognized private statistics") from None
+
+            def counters(value):
+                return ((type(value) is int and value >= 0) or
+                        (isinstance(value, dict) and value and all(
+                            isinstance(key, str) and re.fullmatch(r"[A-Za-z0-9_. -]+", key) and counters(child)
+                            for key, child in value.items())))
+
+            if not isinstance(statistics, dict) or not counters(statistics):
+                raise ValueError("Unrecognized private statistics")
+        else:
+            raise ValueError("Private metadata/fallback or unknown diagnostic rejected")
+    if not wal_ranges:
+        raise ValueError("Detailed WAL diagnostics required")
+    return True
+
+
+def parse_report(text, *, stanza, labels, diagnostics):
     if not re.fullmatch(r"[A-Za-z0-9_-]+", stanza):
         raise ValueError("Invalid expected stanza")
     if not labels or len(set(labels)) != len(labels) or any(not LABEL.fullmatch(x) for x in labels):
@@ -49,9 +102,10 @@ def parse_report(text, *, stanza, labels):
         index += 1
     if set(backups) != set(labels) or not archives:
         raise ValueError("Expected complete set and verified WAL required")
+    validate_diagnostics(diagnostics, text, labels)
     return {"schemaVersion": 1, "pgBackRestVersion": "2.57.0", "stanza": stanza,
             "backupFilesChecked": backups, "walFilesChecked": archives,
-            "reportAccepted": True, "independentWalValidated": False,
+            "reportAccepted": True, "privateDiagnosticsAccepted": True, "independentWalValidated": False,
             "realDatabaseRestored": False, "restoreApproved": False}
 
 
@@ -60,10 +114,12 @@ def main():
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--stanza", required=True)
     parser.add_argument("--label", action="append", required=True)
+    parser.add_argument("--diagnostics", type=Path, required=True)
     args = parser.parse_args()
     # Never echo rejected input: real reports may contain private paths/metadata.
     try:
-        result = parse_report(args.report.read_text(encoding="utf-8"), stanza=args.stanza, labels=args.label)
+        result = parse_report(args.report.read_text(encoding="utf-8"), stanza=args.stanza, labels=args.label,
+                              diagnostics=args.diagnostics.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
         raise SystemExit("Verification report rejected; private detail omitted") from None
     print(json.dumps(result, sort_keys=True))

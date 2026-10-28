@@ -73,6 +73,7 @@ def main():
                       "postgres --version; pgbackrest version; "
                       "cat /opt/chico-toolchain/binaries.sha256; "
                       "cat /opt/chico-toolchain/packages.tsv; "
+                      "cat /opt/chico-toolchain/runner-ca.sha256; "
                       "cat /opt/chico-toolchain/build/compiler.txt; "
                       "cat /opt/chico-toolchain/build/source.sha256; "
                       "cat /opt/chico-toolchain/build/packages.tsv; "
@@ -95,13 +96,15 @@ def main():
     os.chmod(config / "pgbackrest.conf", 0o600)
     os.chown(config / "pgbackrest.conf", uid, uid)
     base = ["--config=/config/pgbackrest.conf", "--stanza=fixture"]
+    verify_base = base + ["--log-level-stderr=detail", "--log-timestamp=n"]
     repo = work / "repo"
     verification = []
     for number, label in enumerate(labels):
-        result = run(base + ["--set=" + label, "--output=text", "--verbose", "verify"],
+        result = run(verify_base + ["--set=" + label, "--output=text", "--verbose", "verify"],
                      extra={"/repo": repo, "/config": config}, entrypoint="/usr/local/bin/pgbackrest",
                      filename=f"verify-{number}.txt")
-        verification.append(report.parse_report(result.stdout.decode(), stanza="fixture", labels=[label]))
+        verification.append(report.parse_report(result.stdout.decode(), stanza="fixture", labels=[label],
+                                                 diagnostics=result.stderr.decode()))
 
     # Copy only our fresh synthetic repo. Corrupt an existing encrypted backup payload.
     corrupt = evidence / "corrupt-repo"
@@ -117,11 +120,11 @@ def main():
     data = bytearray(payload.read_bytes())
     data[len(data) // 2] ^= 1
     payload.write_bytes(data)
-    negative = run(base + ["--set=" + labels[0], "--output=text", "--verbose", "verify"],
+    negative = run(verify_base + ["--set=" + labels[0], "--output=text", "--verbose", "verify"],
                    extra={"/repo": corrupt, "/config": config}, entrypoint="/usr/local/bin/pgbackrest",
                    filename="verify-corrupt.txt", check=False)
     try:
-        report.parse_report(negative.stdout.decode(), stanza="fixture", labels=[labels[0]])
+        report.parse_report(negative.stdout.decode(), stanza="fixture", labels=[labels[0]], diagnostics=negative.stderr.decode())
     except (ValueError, UnicodeError):
         corruption_rejected = True
     else:
@@ -129,6 +132,37 @@ def main():
     # Require a real verification failure report as well as parser rejection, not just an unrelated crash.
     if b"status: error" not in negative.stdout or not re.search(rb"(?:checksum invalid|size invalid|other): [1-9]", negative.stdout):
         raise ValueError("Corruption did not exercise repository verification failure")
+
+    # Restore payload then exercise main/copy metadata failures independently.
+    payload.write_bytes((repo / payload.relative_to(corrupt)).read_bytes())
+    metadata_cases = [("backup/fixture/backup.info", labels[0]),
+                      ("backup/fixture/backup.info.copy", labels[0]),
+                      ("archive/fixture/archive.info", labels[0]),
+                      ("archive/fixture/archive.info.copy", labels[0])]
+    for label in labels:
+        metadata_cases += [(f"backup/fixture/{label}/backup.manifest", label),
+                           (f"backup/fixture/{label}/backup.manifest.copy", label)]
+    metadata_results = []
+    for case, (relative, label) in enumerate(metadata_cases):
+        target = corrupt / relative
+        original = target.read_bytes()
+        changed = bytearray(original)
+        changed[len(changed) // 2] ^= 1
+        target.write_bytes(changed)
+        diagnostic_result = run(verify_base + ["--set=" + label, "--output=text", "--verbose", "verify"],
+                                extra={"/repo": corrupt, "/config": config}, entrypoint="/usr/local/bin/pgbackrest",
+                                filename=f"metadata-negative-{case}.txt", check=False)
+        target.write_bytes(original)
+        # The dangerous fallback case must really emit status ok; unrelated crashes do not prove this gap closed.
+        if diagnostic_result.returncode != 0 or b"status: ok" not in diagnostic_result.stdout:
+            raise ValueError("Metadata fixture did not exercise successful-summary fallback")
+        try:
+            report.parse_report(diagnostic_result.stdout.decode(), stanza="fixture", labels=[label],
+                                diagnostics=diagnostic_result.stderr.decode())
+        except (ValueError, UnicodeError):
+            metadata_results.append({"case": case, "summaryWasOk": True, "privateDiagnosticsRejected": True})
+        else:
+            raise ValueError("Metadata corruption/fallback was accepted")
 
     pgdata = evidence / "recovered"
     private_directory(pgdata, uid)
@@ -188,6 +222,7 @@ test "$(psql -h /tmp/socket -d postgres -At -v ON_ERROR_STOP=1 -c 'SELECT count(
                "pgBackRestSourceCommit": "d9773a31c97077761ee8e7d06e073b0b0734e26f",
                "reports": verification, "realBinaryCorruptionRejected": corruption_rejected,
                "corruptionProcessExitCode": negative.returncode,
+               "metadataMainAndCopyNegativeCases": metadata_results,
                "syntheticFullDiffRecoveryRows": 3, "independentSyntheticWalValidated": True,
                "walSHA256": hashlib.sha256(wal).hexdigest(), "realBackupValidated": False,
                "realDatabaseRestored": False, "restoreApproved": False}

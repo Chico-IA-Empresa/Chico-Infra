@@ -27,9 +27,16 @@ status: ok
 """
 
 
+def diagnostic(report=SAMPLE, detail=None):
+    return (f"INFO: verify command begin 2.57.0: --log-level-stderr=detail --log-level-console=off --output=text --verbose --set={LABEL}\n"
+            + (detail or "DETAIL: archiveId: 16-1, wal start: 000000010000000000000001, wal stop: 000000010000000000000002")
+            + "\nINFO: " + report.rstrip().replace("\n", "\n      ")
+            + "\nINFO: verify command end: completed successfully (123ms)\n")
+
+
 class ReportTests(unittest.TestCase):
     def parse(self, report=SAMPLE, labels=None):
-        return verify.parse_report(report, stanza="fixture", labels=labels or [LABEL])
+        return verify.parse_report(report, stanza="fixture", labels=labels or [LABEL], diagnostics=diagnostic(report))
 
     def test_complete_report_is_only_one_gate(self):
         result = self.parse()
@@ -64,6 +71,33 @@ class ReportTests(unittest.TestCase):
     def test_duplicate_section_rejected(self):
         with self.assertRaises(ValueError):
             self.parse(SAMPLE + "\n".join(SAMPLE.splitlines()[4:]) + "\n")
+
+    def test_successful_report_does_not_hide_metadata_fallback(self):
+        details = ["DETAIL: unable to open missing backup.info",
+                   "DETAIL: backup.info.copy does not match backup.info",
+                   "DETAIL: backup manifest is missing or unusable, using copy",
+                   "DETAIL: archive.info.copy does not match archive.info",
+                   "DETAIL: unknown message", "WARN: file missing"]
+        for detail in details:
+            with self.subTest(detail=detail), self.assertRaises(ValueError):
+                verify.parse_report(SAMPLE, stanza="fixture", labels=[LABEL], diagnostics=diagnostic(detail=detail))
+
+    def test_missing_or_changed_diagnostic_binding_rejected(self):
+        for diag in ["", diagnostic().replace("2.57.0", "2.58.0"),
+                     diagnostic().replace("--log-level-stderr=detail", "--log-level-stderr=off"),
+                     diagnostic().replace("--set=" + LABEL, "--set=20261027-000000F"),
+                     diagnostic().replace("total valid files: 123", "total valid files: 122"),
+                     "\n".join(diagnostic().splitlines()[:-1])]:
+            with self.subTest(diag=diag), self.assertRaises(ValueError):
+                verify.parse_report(SAMPLE, stanza="fixture", labels=[LABEL], diagnostics=diag)
+
+    def test_upstream_command_statistics_are_parsed_as_counters(self):
+        diag = diagnostic().replace("INFO: verify command end", 'DETAIL: statistics: {"storage":{"read":10}}\nINFO: verify command end')
+        self.assertTrue(verify.parse_report(SAMPLE, stanza="fixture", labels=[LABEL], diagnostics=diag)["privateDiagnosticsAccepted"])
+        for value in ['{"secret":"arbitrary"}', '{"storage":-1}', 'not-json']:
+            bad = diagnostic().replace("INFO: verify command end", 'DETAIL: statistics: ' + value + '\nINFO: verify command end')
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                verify.parse_report(SAMPLE, stanza="fixture", labels=[LABEL], diagnostics=bad)
 
 
 class IsolationTests(unittest.TestCase):
