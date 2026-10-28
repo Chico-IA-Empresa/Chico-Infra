@@ -11,7 +11,7 @@ const owned = { StringEquals: { 'aws:ResourceTag/project': 'chicoai', 'aws:Resou
 const creating = { StringEquals: { 'aws:RequestTag/project': 'chicoai', 'aws:RequestTag/env': 'dev', 'aws:RequestedRegion': 'sa-east-1' } };
 
 export function devInfraPolicies(i) {
-  const fields = ['account', 'stateBucket', 'reviewBucket', 'backupBucket', 'accessLogBucket', 'amiId', 'kmsKeyArns', 'vpcId', 'defaultSecurityGroupId'];
+  const fields = ['account', 'stateBucket', 'reviewBucket', 'backupBucket', 'accessLogBucket', 'amiId', 'kmsKeyArns', 'secretsKeyArn', 'vpcId', 'defaultSecurityGroupId'];
   if (!i || typeof i !== 'object' || Array.isArray(i) || Object.keys(i).some(key => !fields.includes(key))) throw new Error('Only reviewed metadata fields are accepted');
   const exact = (value, pattern, name) => { if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`Invalid ${name}`); return value; };
   const account = exact(i.account, /^[0-9]{12}$/, 'account');
@@ -24,6 +24,8 @@ export function devInfraPolicies(i) {
   if (!Array.isArray(i.kmsKeyArns) || !i.kmsKeyArns.length) throw new Error('Reviewed KMS keys required');
   i.kmsKeyArns.forEach(arn => exact(arn, new RegExp(`^arn:aws:kms:sa-east-1:${account}:key/[a-f0-9-]{36}$`), 'KMS key'));
   if (new Set(i.kmsKeyArns).size !== i.kmsKeyArns.length) throw new Error('Duplicate KMS key');
+  const secretsKey = exact(i.secretsKeyArn, new RegExp(`^arn:aws:kms:sa-east-1:${account}:key/[a-f0-9-]{36}$`), 'Secrets CMK');
+  if (!i.kmsKeyArns.includes(secretsKey)) throw new Error('Secrets CMK must be an explicitly reviewed Dev key');
   // The first human executor establishes the VPC. Exact IDs are required for
   // implicit resources (default SG, primary ENI), which cannot carry request tags.
   const vpc = exact(i.vpcId, /^vpc-[a-f0-9]{17}$/, 'reconciled Dev VPC');
@@ -49,6 +51,9 @@ export function devInfraPolicies(i) {
     allow('DevStateLock', ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], `arn:aws:s3:::${state}/dev/terraform.tfstate.tflock`),
     allow('ReviewBucketChecks', ['s3:GetBucketPublicAccessBlock', 's3:GetBucketVersioning'], `arn:aws:s3:::${review}`),
     allow('BackupConfiguration', ['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketTagging', 's3:GetBucketPublicAccessBlock', 's3:GetBucketOwnershipControls', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:GetBucketLogging', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketRequestPayment'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
+    // HeadBucket requires ListBucket without s3:prefix. This grants metadata
+    // listing of these two owned buckets, never their object bodies or legacy S3.
+    allow('DevBucketExistenceMetadata', ['s3:ListBucket'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`), region),
     allow('LogGroupsMetadata', ['logs:DescribeLogGroups'], '*', region),
     allow('DevLogMetadata', ['logs:ListTagsForResource'], logs, region),
     allow('AlarmMetadata', ['cloudwatch:DescribeAlarms'], '*', region),
@@ -81,9 +86,16 @@ export function devInfraPolicies(i) {
     allow('PassRuntimeToEc2', ['iam:PassRole'], runtime, { StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' } }),
     allow('PassFlowToVpc', ['iam:PassRole'], flow, { StringEquals: { 'iam:PassedToService': 'vpc-flow-logs.amazonaws.com' } }),
     allow('ManageBackupConfiguration', ['s3:CreateBucket', 's3:PutBucketPolicy', 's3:PutBucketTagging', 's3:PutBucketPublicAccessBlock', 's3:PutBucketOwnershipControls', 's3:PutBucketVersioning', 's3:PutEncryptionConfiguration', 's3:PutLifecycleConfiguration', 's3:PutBucketLogging'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
+    allow('TagDevBucketsAtCreation', ['s3:TagResource'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`), creating),
     allow('ManageDevLogGroups', ['logs:CreateLogGroup', 'logs:PutRetentionPolicy', 'logs:AssociateKmsKey', 'logs:TagResource', 'logs:UntagResource'], logs, region),
     allow('ManageDevAlarms', ['cloudwatch:PutMetricAlarm', 'cloudwatch:DeleteAlarms', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], `arn:aws:cloudwatch:sa-east-1:${account}:alarm:chico-dev-*`, region),
     allow('ManageSecretMetadata', ['secretsmanager:CreateSecret', 'secretsmanager:UpdateSecret', 'secretsmanager:TagResource', 'secretsmanager:UntagResource'], secret, region),
+    // Secrets Manager validates a custom key even for metadata-only creation.
+    // Permit only its validation context, never real secret versions or direct KMS.
+    allow('ValidateDevSecretKeyMetadata', ['kms:GenerateDataKey', 'kms:Decrypt'], secretsKey, {
+      StringEquals: { ...region.StringEquals, 'kms:CallerAccount': account, 'kms:ViaService': 'secretsmanager.sa-east-1.amazonaws.com', 'kms:EncryptionContext:SecretVersionId': 'RequestToValidateKeyAccess' },
+      StringLike: { 'kms:EncryptionContext:SecretARN': ['api/SYNTHETIC_TOKEN', 'api/DEV_DATABASE_CREDENTIALS'].map(name => `arn:aws:secretsmanager:sa-east-1:${account}:secret:/chico/dev/${name}-??????`) },
+    }),
     allow('ManageNonSecretParameters', ['ssm:PutParameter', 'ssm:DeleteParameter', 'ssm:AddTagsToResource', 'ssm:RemoveTagsFromResource'], parameter, region),
     allow('ManageDevDocuments', ['ssm:CreateDocument', 'ssm:UpdateDocument', 'ssm:UpdateDocumentDefaultVersion', 'ssm:DeleteDocument', 'ssm:AddTagsToResource', 'ssm:RemoveTagsFromResource'], `arn:aws:ssm:sa-east-1:${account}:document/chico-dev-*`, region),
   ];

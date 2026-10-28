@@ -2,6 +2,8 @@
 
 `scripts/dev-infra-permissions.mjs` gera candidatos privados para plan, apply e duas permissions boundaries. Não cria nem anexa policies na AWS. A entrada deve conter conta, buckets state/revisão/backup/sink (`accessLogBucket`) reconciliados, AMI, CMKs reais e IDs do VPC Dev/default SG confirmados no inventário. O sink é distinto da origem e gerenciado pela root Dev; runtime não recebe acesso aos seus objetos nem ao bucket legado. Ver [ondas da fase 1](phase1-execution.md).
 
+O campo `secretsKeyArn` identifica explicitamente a CMK de secrets dentro de `kmsKeyArns`; não inferir sua função pela ordem. O grant CI correspondente só permite validação de metadata via Secrets Manager com contexto RequestToValidateKeyAccess. HeadBucket e tags na criação dos buckets também têm grants limitados aos dois ARNs próprios. Ver [diagnóstico e recuperação de provisionamento](dev-ci-provisioning-recovery.md).
+
 ```powershell
 node scripts/dev-infra-permissions.mjs reports/private/dev-inventory.json reports/private/dev-policies
 node scripts/verify-iam-actions.mjs reports/private/dev-inventory.json
