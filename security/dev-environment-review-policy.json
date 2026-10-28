@@ -1,0 +1,16 @@
+{
+  "repository": "Chico-IA-Empresa/Chico-Infra",
+  "scope": "dev-plan-apply-environments-only",
+  "reason": "single-maintainer",
+  "approvedBy": "FelipeTorresHora",
+  "approvedOn": "2026-10-28",
+  "preventSelfReview": false,
+  "manualApprovalRequired": true,
+  "reviewerSelection": "all-current-repository-collaborators",
+  "reviewers": [
+    { "type": "User", "id": 38845628, "login": "andrebragans" },
+    { "type": "User", "id": 111293503, "login": "FelipeTorresHora" },
+    { "type": "User", "id": 149218684, "login": "oguilhermeleite" },
+    { "type": "User", "id": 261274622, "login": "Chico-ia" }
+  ]
+}
