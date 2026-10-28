@@ -13,3 +13,5 @@ Use empty PGDATA and a network-isolated compatible container, disable preloads/r
 Fixed lease expiry denies S3 independently and stops compute while preserving data on the stopped host. Storage charges continue. After the real Dev restore, own backup and independent recovery are proven, prepare a cleanup plan listing the instance and root volume ID, profile, policies and owned temporary artifacts. A reviewed termination deletes this temporary root volume; it must not occur before those gates. Expiry never auto-terminates, deletes backups, changes the source bucket or destroys permanent Dev resources. Preserve private evidence and the protected state.
 
 This root is preparation only. Actual access/negative tests, current lease, timer/reboot behavior, egress isolation, payload/WAL integrity, compatibility, data reconciliation and cleanup remain runtime evidence requirements.
+
+The dedicated [security gate](../../docs/restore-staging-security-review.md) scans this root with an explicitly synthetic, expired scanner fixture. Only two source-bound, dated exceptions are accepted; it never grants permission to provision or substitutes runtime verification.

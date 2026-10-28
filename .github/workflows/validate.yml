@@ -75,16 +75,18 @@ jobs:
         with:
           node-version: '24'
       - run: pip install checkov==3.3.29
-      - name: Gate Dev and required foundation with exact reviewed exceptions
+      - name: Gate Dev, foundation and temporary restore with exact reviewed exceptions
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p reports
-          for scope in bootstrap shared dev; do
+          for scope in bootstrap shared dev restore-staging; do
             root="envs/$scope"
             if test "$scope" = bootstrap; then root=bootstrap; fi
+            if test "$scope" = restore-staging; then root=operations/restore-staging/terraform; fi
             scan_args=()
             if test "$scope" = dev; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/dev-scan.tfvars"); fi
+            if test "$scope" = restore-staging; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/restore-staging-scan.tfvars"); fi
             code=0
             checkov -d "$root" --framework terraform --quiet --skip-download "${scan_args[@]}" -o json > "reports/checkov-$scope-scope.json" || code=$?
             test "$code" -le 1
