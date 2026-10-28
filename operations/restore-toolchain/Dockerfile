@@ -35,7 +35,7 @@ RUN sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.s
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /usr/local/bin/pgbackrest /usr/local/bin/pgbackrest
 COPY --from=build /build-provenance /opt/chico-toolchain/build
-RUN mkdir /opt/chico-toolchain \
+RUN mkdir -p /opt/chico-toolchain \
     && test "$(pgbackrest version)" = 'pgBackRest 2.57.0' \
     && postgres --version | grep -E '^postgres \(PostgreSQL\) 16\.13([ .]|$)' \
     && dpkg-query -W -f='${Package}\t${Version}\n' | LC_ALL=C sort > /opt/chico-toolchain/packages.tsv \
