@@ -1,0 +1,117 @@
+name: Dev reviewed state-only repair
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_version:
+        description: Exact S3 version of private reviewed six-resource repair manifest
+        type: string
+        required: true
+      approved_manifest_sha256:
+        description: Human-approved private repair manifest SHA256
+        type: string
+        required: true
+      exclusive_writer_attestation:
+        description: Type ALL_EXTERNAL_WRITERS_QUIESCED after stopping every external writer to Dev state
+        type: string
+        required: true
+      exclusive_window_start_utc:
+        description: Explicit human maintenance window start in UTC (ISO8601 ending Z)
+        type: string
+        required: true
+      exclusive_window_end_utc:
+        description: Explicit window end in UTC, at most 30 minutes after start; approval must finish within it
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: node scripts/github-readiness.mjs apply
+  repair:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: infra-apply-dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Validate private execution gates
+        env:
+          BACKEND_CONFIG: ${{ secrets.BACKEND_CONFIG }}
+          TF_VARS_JSON: ${{ secrets.TF_VARS_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          umask 077
+          printf '%s' "$BACKEND_CONFIG" > envs/dev/backend.hcl
+          printf '%s' "$TF_VARS_JSON" > envs/dev/ci.auto.tfvars.json
+          node scripts/execution-gates.mjs envs/dev/ci.auto.tfvars.json
+          node scripts/backend-guard.mjs envs/dev/backend.hcl "$ACCOUNT"
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.APPLY_ROLE_ARN }}
+          aws-region: sa-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Repair only the six reviewed taint flags
+        env:
+          MANIFEST_VERSION: ${{ inputs.manifest_version }}
+          APPROVED_HASH: ${{ inputs.approved_manifest_sha256 }}
+          REVIEW_BUCKET: ${{ vars.PRIVATE_REVIEW_BUCKET }}
+          ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+          EXCLUSIVE_WRITER_ATTESTATION: ${{ inputs.exclusive_writer_attestation }}
+          EXCLUSIVE_WINDOW_START_UTC: ${{ inputs.exclusive_window_start_utc }}
+          EXCLUSIVE_WINDOW_END_UTC: ${{ inputs.exclusive_window_end_utc }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$APPROVED_HASH" =~ ^[a-f0-9]{64}$ ]]
+          test -n "$MANIFEST_VERSION" && test "$MANIFEST_VERSION" != null
+          private_dir="$RUNNER_TEMP/dev-state-repair"
+          mkdir -m 0700 "$private_dir"
+          aws s3api get-public-access-block --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" > "$private_dir/pab.json"
+          jq -e '.PublicAccessBlockConfiguration | .BlockPublicAcls and .IgnorePublicAcls and .BlockPublicPolicy and .RestrictPublicBuckets' "$private_dir/pab.json" >/dev/null
+          test "$(aws s3api get-bucket-versioning --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --query Status --output text)" = Enabled
+          aws s3api get-object --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" --key "dev/$GITHUB_SHA/state-repair/review-manifest.json" --version-id "$MANIFEST_VERSION" "$private_dir/manifest.json" >/dev/null
+          state_bucket="chico-tfstate-$ACCOUNT-sa-east-1"
+          terraform -chdir=envs/dev init -input=false -lockfile=readonly -backend-config=backend.hcl > "$private_dir/init.log" 2>&1
+          node scripts/dev-state-repair.mjs attest "$private_dir/manifest.json" "$private_dir/exclusive-window.json" envs/dev/backend.hcl
+          aws s3api get-object --bucket "$state_bucket" --expected-bucket-owner "$ACCOUNT" --key dev/terraform.tfstate "$private_dir/before.json" > "$private_dir/download.json"
+          node scripts/dev-state-repair.mjs check "$private_dir/manifest.json" "$private_dir/before.json" "$private_dir/download.json" envs/dev/backend.hcl envs/dev/ci.auto.tfvars.json "$GITHUB_SHA" "$APPROVED_HASH"
+          cp "$private_dir/before.json" "$private_dir/expected.json"
+          cp "$private_dir/download.json" "$private_dir/expected-download.json"
+          for i in 0 1 2 3 4 5; do
+            aws s3api get-object --bucket "$state_bucket" --expected-bucket-owner "$ACCOUNT" --key dev/terraform.tfstate "$private_dir/pre.json" > "$private_dir/pre-download.json"
+            node scripts/dev-state-repair.mjs step "$private_dir/manifest.json" "$private_dir/before.json" "$private_dir/expected.json" "$private_dir/expected-download.json" "$private_dir/pre.json" "$private_dir/pre-download.json" envs/dev/backend.hcl envs/dev/ci.auto.tfvars.json "$private_dir/exclusive-window.json" "$i" "$private_dir/untaint-$i.log"
+            aws s3api get-object --bucket "$state_bucket" --expected-bucket-owner "$ACCOUNT" --key dev/terraform.tfstate "$private_dir/current.json" > "$private_dir/current-download.json"
+            node scripts/dev-state-repair.mjs post "$private_dir/manifest.json" "$private_dir/before.json" "$private_dir/current.json" "$private_dir/current-download.json" "$private_dir/expected-download.json" envs/dev/backend.hcl "$private_dir/exclusive-window.json" "$((i+1))" "$private_dir/evidence-$i.json"
+            cp "$private_dir/current.json" "$private_dir/expected.json"
+            cp "$private_dir/current-download.json" "$private_dir/expected-download.json"
+          done
+      - name: Remove private files after any result
+        if: always()
+        shell: bash
+        run: |
+          rm -f envs/dev/backend.hcl envs/dev/ci.auto.tfvars.json
+          rm -f "$RUNNER_TEMP/dev-state-repair/"*.json "$RUNNER_TEMP/dev-state-repair/"*.log

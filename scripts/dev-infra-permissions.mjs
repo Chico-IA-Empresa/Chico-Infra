@@ -42,7 +42,7 @@ export function devInfraPolicies(i) {
   const parameter = `arn:aws:ssm:sa-east-1:${account}:parameter/chico/dev/*`;
   const secret = `arn:aws:secretsmanager:sa-east-1:${account}:secret:/chico/dev/*`;
   const reads = [
-    allow('Ec2Metadata', ['ec2:DescribeVpcs', 'ec2:DescribeVpcAttribute', 'ec2:DescribeSubnets', 'ec2:DescribeRouteTables', 'ec2:DescribeInternetGateways', 'ec2:DescribeSecurityGroups', 'ec2:DescribeSecurityGroupRules', 'ec2:DescribeInstances', 'ec2:DescribeInstanceAttribute', 'ec2:DescribeInstanceCreditSpecifications', 'ec2:DescribeInstanceTypes', 'ec2:DescribeVolumes', 'ec2:DescribeAddresses', 'ec2:DescribeImages', 'ec2:DescribeTags', 'ec2:DescribeNetworkInterfaces', 'ec2:DescribeFlowLogs', 'ec2:DescribeAvailabilityZones'], '*', region),
+    allow('Ec2Metadata', ['ec2:DescribeVpcs', 'ec2:DescribeVpcAttribute', 'ec2:DescribeSubnets', 'ec2:DescribeRouteTables', 'ec2:DescribeInternetGateways', 'ec2:DescribeSecurityGroups', 'ec2:DescribeSecurityGroupRules', 'ec2:DescribeInstances', 'ec2:DescribeInstanceAttribute', 'ec2:DescribeInstanceCreditSpecifications', 'ec2:DescribeInstanceTypes', 'ec2:DescribeVolumes', 'ec2:DescribeAddresses', 'ec2:DescribeAddressesAttribute', 'ec2:DescribeImages', 'ec2:DescribeTags', 'ec2:DescribeNetworkInterfaces', 'ec2:DescribeFlowLogs', 'ec2:DescribeAvailabilityZones'], '*', region),
     allow('RuntimeRoleMetadata', ['iam:GetRole', 'iam:GetRolePolicy', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies', 'iam:ListInstanceProfilesForRole'], [runtime, flow]),
     allow('ProfileMetadata', ['iam:GetInstanceProfile'], `arn:aws:iam::${account}:instance-profile/chico/dev/chico-dev-runtime`),
     allow('BoundaryMetadata', ['iam:GetPolicy', 'iam:GetPolicyVersion'], Object.values(boundaries)),
@@ -61,7 +61,10 @@ export function devInfraPolicies(i) {
     allow('KeyMetadata', ['kms:DescribeKey'], i.kmsKeyArns, region),
     allow('ConfigurationMetadata', ['secretsmanager:DescribeSecret', 'secretsmanager:GetResourcePolicy'], secret, region),
     allow('NonSecretParameters', ['ssm:GetParameter', 'ssm:ListTagsForResource'], parameter, region),
-    allow('DevDocuments', ['ssm:DescribeDocument', 'ssm:GetDocument', 'ssm:ListDocumentVersions', 'ssm:ListTagsForResource'], `arn:aws:ssm:sa-east-1:${account}:document/chico-dev-*`, region),
+    // DescribeParameters has no resource-level permission support and returns
+    // metadata only. Parameter values remain restricted to the Dev namespace.
+    allow('ParameterMetadataDiscovery', ['ssm:DescribeParameters'], '*', region),
+    allow('DevDocuments', ['ssm:DescribeDocument', 'ssm:DescribeDocumentPermission', 'ssm:GetDocument', 'ssm:ListDocumentVersions', 'ssm:ListTagsForResource'], `arn:aws:ssm:sa-east-1:${account}:document/chico-dev-*`, region),
   ];
   const plan = document([...reads, allow('UploadPrivatePlan', ['s3:PutObject'], `arn:aws:s3:::${review}/dev/*`)]);
   const writes = [
@@ -78,6 +81,7 @@ export function devInfraPolicies(i) {
     allow('LaunchTaggedHost', ['ec2:RunInstances'], ec2('instance'), { StringEquals: { ...creating.StringEquals, 'ec2:InstanceType': 't4g.small', 'ec2:MetadataHttpTokens': 'required', 'ec2:InstanceProfile': `arn:aws:iam::${account}:instance-profile/chico/dev/chico-dev-runtime` } }),
     allow('LaunchEncryptedVolume', ['ec2:RunInstances'], ec2('volume'), { StringEquals: creating.StringEquals, Bool: { 'ec2:Encrypted': 'true' } }),
     allow('HostMaintenance', ['ec2:ModifyInstanceAttribute', 'ec2:ModifyInstanceMetadataOptions', 'ec2:ModifyInstanceCreditSpecification', 'ec2:ModifyVolume'], ['instance', 'volume'].map(ec2), owned),
+    allow('MaintainDevHostPower', ['ec2:StopInstances', 'ec2:StartInstances'], ec2('instance'), owned),
     allow('TagsAtCreation', ['ec2:CreateTags'], ['subnet', 'security-group', 'route-table', 'internet-gateway', 'elastic-ip', 'instance', 'volume', 'vpc-flow-log'].map(ec2), { StringEquals: { ...creating.StringEquals, 'ec2:CreateAction': ['RunInstances', 'CreateSubnet', 'CreateSecurityGroup', 'CreateRouteTable', 'CreateInternetGateway', 'AllocateAddress', 'CreateFlowLogs'] } }),
     allow('UpdateOwnedTags', ['ec2:CreateTags', 'ec2:DeleteTags'], ['subnet', 'security-group', 'route-table', 'internet-gateway', 'elastic-ip', 'instance', 'volume', 'vpc-flow-log'].map(ec2), owned),
     ...[[runtime, boundaries.runtime], [flow, boundaries.flow]].map(([arn, boundary], n) => allow(`BoundedRole${n}`, ['iam:CreateRole', 'iam:PutRolePolicy', 'iam:PutRolePermissionsBoundary'], arn, { StringEquals: { 'iam:PermissionsBoundary': boundary } })),
