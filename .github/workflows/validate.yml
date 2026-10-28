@@ -58,6 +58,7 @@ jobs:
       - run: python tests/proxy-events.test.py
       - run: python tests/dev-database-backup.test.py
       - run: python tests/restore-source-copy.test.py
+      - run: python tests/cipher-envelope.test.py
       - name: Synthetic PostgreSQL16 database backup and isolated recovery
         env:
           CHICO_DATABASE_INTEGRATION: 'true'

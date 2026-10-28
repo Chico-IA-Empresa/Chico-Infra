@@ -36,7 +36,7 @@ if test "$(date -u +%s)" -ge "$(date -u -d "$CHICO_STAGE_EXPIRES_UTC" +%s)"; the
 fi
 
 task_try=0
-until dnf install -y docker curl jq python3 awscli2 amazon-ssm-agent zstd; do
+until dnf install -y docker curl jq python3 awscli2 amazon-ssm-agent zstd openssl; do
   task_try=$((task_try + 1))
   test "$task_try" -lt 10
   sleep 15
