@@ -15,3 +15,19 @@ Fixed lease expiry denies S3 independently and stops compute while preserving da
 This root is preparation only. Actual access/negative tests, current lease, timer/reboot behavior, egress isolation, payload/WAL integrity, compatibility, data reconciliation and cleanup remain runtime evidence requirements.
 
 The dedicated [security gate](../../docs/restore-staging-security-review.md) scans this root with an explicitly synthetic, expired scanner fixture. Only two source-bound, dated exceptions are accepted; it never grants permission to provision or substitutes runtime verification.
+
+## Version-pinned transfer
+
+`copy-selected-source.py` is an operational transport for the approved Linux staging host, not a provisioning or database-restore script. AWS Core must first verify the actual instance/profile, encrypted volume, available capacity and lease against the reviewed plan. Deliver the exact frozen private source manifest and script by the reviewed private executor; do not regenerate a latest selection. Run only after the staging and source-access gates have passed:
+
+```bash
+python3 /opt/chico-restore/copy-selected-source.py \
+  --manifest /run/chico-restore/source-selection.json \
+  --manifest-sha256 "$REVIEWED_SOURCE_SHA256" \
+  --destination "/srv/chico-restore/$IMPORT_ID" \
+  --not-before "$REVIEWED_LEASE_START" --expires-at "$REVIEWED_LEASE_END"
+```
+
+The transport refuses root/permanent Dev/foreign AWS identities and requires `chico-dev-restore`. Its only AWS APIs are STS identity and versioned S3 GetObject; it never lists latest, writes the source, restores archived objects or syncs a repository. It validates manifest hash, safe unique paths, selected versions, returned sizes/ETag/timestamps, local bytes and SHA256. ETag is compared only as metadata; it is never assumed to be SHA256. A returned FULL_OBJECT SHA256 is checked when present; absent/composite checksums remain explicitly unverified.
+
+It requires a fresh private directory and copy workspace; failures preserve partial files with a failure record and no completion marker. No automatic cleanup, resume, disk expansion or data deletion occurs. A successful transfer freezes local hashes and read-only permissions, then writes a private completion record. It explicitly leaves backup/WAL integrity and database restore unproven. Bind only the `repo/` child read-only into the isolated pinned toolchain; the private parent stays0700 and cipher configuration is a separate protected tmpfs mount. File permissions alone are not an immutable mount.
