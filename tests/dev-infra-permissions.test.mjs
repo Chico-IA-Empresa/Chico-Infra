@@ -94,3 +94,23 @@ test('CI KMS grant permits validation only, not actual secret versions, other ke
   assert.ok(!planActions.includes('kms:Decrypt'));
   assert.ok(!policies.apply.Statement.flatMap(s => s.Action).includes('secretsmanager:GetSecretValue'));
 });
+
+test('provider post-create reads are metadata only and keep document/value scope bounded', () => {
+  for (const policy of [devInfraPolicies(inventory).plan, devInfraPolicies(inventory).apply]) {
+    assert.ok(policy.Statement.find(s => s.Sid === 'Ec2Metadata').Action.includes('ec2:DescribeAddressesAttribute'));
+    const parameters = policy.Statement.find(s => s.Sid === 'ParameterMetadataDiscovery');
+    assert.deepEqual(parameters.Action, ['ssm:DescribeParameters']);
+    assert.equal(parameters.Resource, '*');
+    assert.deepEqual(parameters.Condition, { StringEquals: { 'aws:RequestedRegion': 'sa-east-1' } });
+    const documents = policy.Statement.find(s => s.Sid === 'DevDocuments');
+    assert.ok(documents.Action.includes('ssm:DescribeDocumentPermission'));
+    assert.equal(documents.Resource, 'arn:aws:ssm:sa-east-1:123456789012:document/chico-dev-*');
+    assert.equal(policy.Statement.find(s => s.Sid === 'NonSecretParameters').Resource, 'arn:aws:ssm:sa-east-1:123456789012:parameter/chico/dev/*');
+    assert.ok(!policy.Statement.flatMap(s => s.Action).includes('ssm:GetParametersByPath'));
+  }
+  const power = devInfraPolicies(inventory).apply.Statement.find(s => s.Sid === 'MaintainDevHostPower');
+  assert.deepEqual(power.Action, ['ec2:StopInstances', 'ec2:StartInstances']);
+  assert.equal(power.Resource, 'arn:aws:ec2:sa-east-1:123456789012:instance/*');
+  assert.equal(power.Condition.StringEquals['aws:ResourceTag/project'], 'chicoai');
+  assert.equal(power.Condition.StringEquals['aws:ResourceTag/env'], 'dev');
+});
