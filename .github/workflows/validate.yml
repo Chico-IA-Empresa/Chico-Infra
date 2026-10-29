@@ -35,17 +35,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for root in bootstrap envs/shared envs/dev envs/uat envs/prod; do
+          for root in bootstrap envs/shared envs/dev envs/uat envs/prod operations/restore-staging/terraform; do
             terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="$root" validate
           done
           terraform -chdir=envs/dev test
           terraform -chdir=envs/shared test
-          for module in network funding oidc data schedules web-service dev-box budgets audit access-log-sink; do
+          terraform -chdir=operations/restore-staging/terraform test
+          for module in network funding oidc data schedules web-service dev-box budgets audit access-log-sink restore-access restore-staging; do
             terraform -chdir="modules/$module" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="modules/$module" validate
             terraform -chdir="modules/$module" test
           done
+          bash -n modules/restore-staging/bootstrap.sh
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:
           tflint_version: v0.59.1
@@ -56,6 +58,9 @@ jobs:
       - run: python tests/config-consumer.test.py
       - run: python tests/proxy-events.test.py
       - run: python tests/dev-database-backup.test.py
+      - run: python tests/restore-source-copy.test.py
+      - run: python tests/cipher-envelope.test.py
+      - run: python tests/restore-private-config.test.py
       - name: Synthetic PostgreSQL16 database backup and isolated recovery
         env:
           CHICO_DATABASE_INTEGRATION: 'true'
@@ -74,16 +79,18 @@ jobs:
         with:
           node-version: '24'
       - run: pip install checkov==3.3.29
-      - name: Gate Dev and required foundation with exact reviewed exceptions
+      - name: Gate Dev, foundation and temporary restore with exact reviewed exceptions
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p reports
-          for scope in bootstrap shared dev; do
+          for scope in bootstrap shared dev restore-staging; do
             root="envs/$scope"
             if test "$scope" = bootstrap; then root=bootstrap; fi
+            if test "$scope" = restore-staging; then root=operations/restore-staging/terraform; fi
             scan_args=()
             if test "$scope" = dev; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/dev-scan.tfvars"); fi
+            if test "$scope" = restore-staging; then scan_args=(--var-file "$GITHUB_WORKSPACE/security/restore-staging-scan.tfvars"); fi
             code=0
             checkov -d "$root" --framework terraform --quiet --skip-download "${scan_args[@]}" -o json > "reports/checkov-$scope-scope.json" || code=$?
             test "$code" -le 1
