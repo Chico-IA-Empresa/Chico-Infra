@@ -218,8 +218,8 @@ def main():
         raise ValueError("Fixture WAL range changed; do not silently skip coverage")
     wal_dir = evidence / "wal"
     private_directory(wal_dir, uid)
-    run(base + ["--log-level-stderr=info", "--archive-async=n", "archive-get", start, "/evidence/" + start],
-        extra={"/repo": repo, "/config": config, "/evidence": wal_dir},
+    run(base + ["--log-level-stderr=info", "--pg1-path=/control", "--archive-async=n", "archive-get", start, "/evidence/" + start],
+        extra={"/repo": repo, "/config": config, "/control": pgdata, "/evidence": wal_dir},
         entrypoint="/usr/local/bin/pgbackrest", filename="archive-get.txt")
     control = run(["-ceu", "pg_controldata /pgdata"], extra={"/pgdata": pgdata}, filename="control.txt")
     system = re.search(rb"Database system identifier:\s+([0-9]+)", control.stdout)

@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-TARGETS = {"/repo": True, "/config": True, "/scripts": True,
+TARGETS = {"/repo": True, "/config": True, "/scripts": True, "/control": True,
            "/pgdata": False, "/evidence": False, "/work": False}
 
 

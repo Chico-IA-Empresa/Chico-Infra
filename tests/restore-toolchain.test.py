@@ -119,6 +119,17 @@ class IsolationTests(unittest.TestCase):
                 with self.subTest(image=image, uid=uid), self.assertRaises(ValueError):
                     runner.isolated_command(image, uid, mounts, "/bin/bash", [])
 
+    def test_archive_get_control_is_readonly_and_wal_output_is_separate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory).resolve()
+            command = runner.isolated_command("sha256:" + "a" * 64, 999,
+                {"/control": path, "/evidence": path}, "/usr/local/bin/pgbackrest",
+                ["--pg1-path=/control", "--archive-async=n", "archive-get", "000000010000000000000001", "/evidence/wal"])
+        self.assertTrue(any(x.endswith("dst=/control,readonly") for x in command))
+        self.assertTrue(any(x.endswith("dst=/evidence") for x in command))
+        self.assertFalse(any("dst=/pgdata" in x for x in command))
+        self.assertIn("--network=none", command)
+
 
 class SyntheticDiagnosticsTests(unittest.TestCase):
     def test_known_fixture_cipher_is_removed_from_errors_and_log_files(self):
