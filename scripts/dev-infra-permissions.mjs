@@ -42,7 +42,7 @@ export function devInfraPolicies(i) {
   const parameter = `arn:aws:ssm:sa-east-1:${account}:parameter/chico/dev/*`;
   const secret = `arn:aws:secretsmanager:sa-east-1:${account}:secret:/chico/dev/*`;
   const reads = [
-    allow('Ec2Metadata', ['ec2:DescribeVpcs', 'ec2:DescribeVpcAttribute', 'ec2:DescribeSubnets', 'ec2:DescribeRouteTables', 'ec2:DescribeInternetGateways', 'ec2:DescribeSecurityGroups', 'ec2:DescribeSecurityGroupRules', 'ec2:DescribeInstances', 'ec2:DescribeInstanceAttribute', 'ec2:DescribeInstanceCreditSpecifications', 'ec2:DescribeInstanceTypes', 'ec2:DescribeVolumes', 'ec2:DescribeAddresses', 'ec2:DescribeAddressesAttribute', 'ec2:DescribeImages', 'ec2:DescribeTags', 'ec2:DescribeNetworkInterfaces', 'ec2:DescribeFlowLogs', 'ec2:DescribeAvailabilityZones'], '*', region),
+    allow('Ec2Metadata', ['ec2:DescribeVpcs', 'ec2:DescribeVpcAttribute', 'ec2:DescribeNetworkAcls', 'ec2:DescribeSubnets', 'ec2:DescribeRouteTables', 'ec2:DescribeInternetGateways', 'ec2:DescribeSecurityGroups', 'ec2:DescribeSecurityGroupRules', 'ec2:DescribeInstances', 'ec2:DescribeInstanceAttribute', 'ec2:DescribeInstanceCreditSpecifications', 'ec2:DescribeInstanceTypes', 'ec2:DescribeVolumes', 'ec2:DescribeAddresses', 'ec2:DescribeAddressesAttribute', 'ec2:DescribeImages', 'ec2:DescribeTags', 'ec2:DescribeNetworkInterfaces', 'ec2:DescribeFlowLogs', 'ec2:DescribeAvailabilityZones'], '*', region),
     allow('RuntimeRoleMetadata', ['iam:GetRole', 'iam:GetRolePolicy', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies', 'iam:ListInstanceProfilesForRole'], [runtime, flow]),
     allow('ProfileMetadata', ['iam:GetInstanceProfile'], `arn:aws:iam::${account}:instance-profile/chico/dev/chico-dev-runtime`),
     allow('BoundaryMetadata', ['iam:GetPolicy', 'iam:GetPolicyVersion'], Object.values(boundaries)),
@@ -50,7 +50,9 @@ export function devInfraPolicies(i) {
     allow('ReadDevState', ['s3:GetObject'], `arn:aws:s3:::${state}/dev/terraform.tfstate`),
     allow('DevStateLock', ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'], `arn:aws:s3:::${state}/dev/terraform.tfstate.tflock`),
     allow('ReviewBucketChecks', ['s3:GetBucketPublicAccessBlock', 's3:GetBucketVersioning'], `arn:aws:s3:::${review}`),
-    allow('BackupConfiguration', ['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketTagging', 's3:GetBucketPublicAccessBlock', 's3:GetBucketOwnershipControls', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:GetBucketLogging', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketRequestPayment'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
+    // aws_s3_bucket Read also queries absent legacy configuration fields. Grant
+    // their metadata reads, never writes or object access, on both owned buckets.
+    allow('BackupConfiguration', ['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketCORS', 's3:GetBucketWebsite', 's3:GetAccelerateConfiguration', 's3:GetReplicationConfiguration', 's3:GetBucketTagging', 's3:GetBucketPublicAccessBlock', 's3:GetBucketOwnershipControls', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:GetBucketLogging', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketRequestPayment'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`)),
     // HeadBucket requires ListBucket without s3:prefix. This grants metadata
     // listing of these two owned buckets, never their object bodies or legacy S3.
     allow('DevBucketExistenceMetadata', ['s3:ListBucket'], [backup, accessLogs].map(name => `arn:aws:s3:::${name}`), region),

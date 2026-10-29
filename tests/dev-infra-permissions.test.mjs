@@ -114,3 +114,52 @@ test('provider post-create reads are metadata only and keep document/value scope
   assert.equal(power.Condition.StringEquals['aws:ResourceTag/project'], 'chicoai');
   assert.equal(power.Condition.StringEquals['aws:ResourceTag/env'], 'dev');
 });
+
+test('S3 bucket refresh covers the complete pinned provider metadata path on both exact Dev buckets', () => {
+  // resourceBucketRead calls these even when CORS/website/acceleration/replication
+  // are absent. AccessDenied is not the same as an absent configuration.
+  const required = [
+    's3:GetBucketPolicy', 's3:GetBucketAcl', 's3:GetBucketCORS', 's3:GetBucketWebsite',
+    's3:GetBucketVersioning', 's3:GetAccelerateConfiguration', 's3:GetBucketRequestPayment',
+    's3:GetBucketLogging', 's3:GetLifecycleConfiguration', 's3:GetReplicationConfiguration',
+    's3:GetEncryptionConfiguration', 's3:GetBucketObjectLockConfiguration',
+  ];
+  for (const policy of [devInfraPolicies(inventory).plan, devInfraPolicies(inventory).apply]) {
+    const metadata = policy.Statement.find(s => s.Sid === 'BackupConfiguration');
+    for (const action of required) assert.ok(metadata.Action.includes(action), action);
+    assert.deepEqual(metadata.Resource, [
+      'arn:aws:s3:::chico-dev-unit-backup', 'arn:aws:s3:::chico-dev-access-unit-test',
+    ]);
+    assert.ok(metadata.Action.every(action => action.startsWith('s3:Get')));
+    for (const action of ['s3:GetBucketCORS', 's3:GetBucketWebsite', 's3:GetAccelerateConfiguration', 's3:GetReplicationConfiguration']) {
+      const grants = policy.Statement.filter(s => s.Action.includes(action));
+      assert.equal(grants.length, 1);
+      assert.equal(grants[0].Sid, 'BackupConfiguration');
+    }
+    for (const action of ['s3:PutBucketCORS', 's3:PutBucketWebsite', 's3:PutAccelerateConfiguration', 's3:PutReplicationConfiguration', 's3:GetObjectVersionForReplication']) {
+      assert.ok(!policy.Statement.some(s => s.Action.includes(action)), action);
+    }
+  }
+});
+
+test('VPC refresh can discover its default NACL with regional metadata only', () => {
+  const policies = devInfraPolicies(inventory);
+  for (const policy of [policies.plan, policies.apply]) {
+    const metadata = policy.Statement.find(s => s.Sid === 'Ec2Metadata');
+    for (const action of ['ec2:DescribeVpcs', 'ec2:DescribeVpcAttribute', 'ec2:DescribeNetworkAcls', 'ec2:DescribeRouteTables', 'ec2:DescribeSecurityGroups']) {
+      assert.ok(metadata.Action.includes(action), action);
+    }
+    assert.equal(metadata.Resource, '*');
+    assert.deepEqual(metadata.Condition, { StringEquals: { 'aws:RequestedRegion': 'sa-east-1' } });
+    assert.ok(metadata.Action.every(action => action.startsWith('ec2:Describe')));
+    for (const action of ['ec2:CreateNetworkAcl', 'ec2:ReplaceNetworkAclEntry', 'ec2:ReplaceNetworkAclAssociation', 'ec2:DeleteNetworkAcl']) {
+      assert.ok(!policy.Statement.some(s => s.Action.includes(action)), action);
+    }
+  }
+  for (const boundary of [policies.runtimeBoundary, policies.flowBoundary]) {
+    const actions = boundary.Statement.flatMap(s => s.Action);
+    for (const action of ['ec2:DescribeNetworkAcls', 's3:GetBucketCORS', 's3:GetBucketWebsite', 's3:GetAccelerateConfiguration', 's3:GetReplicationConfiguration']) {
+      assert.ok(!actions.includes(action), action);
+    }
+  }
+});
