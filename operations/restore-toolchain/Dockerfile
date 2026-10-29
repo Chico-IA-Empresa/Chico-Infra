@@ -39,6 +39,7 @@ RUN sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.s
     && apt-cache rdepends --installed libsqlite3-0 > /opt/chico-sqlite-reverse-dependencies.txt \
     && apt-get -s purge libsqlite3-0 > /opt/chico-sqlite-purge-simulation.txt \
     && awk '$1 == "Remv" || $1 == "Purg" { sub(/:amd64$/, "", $2); print $2 }' /opt/chico-sqlite-purge-simulation.txt | LC_ALL=C sort -u > /opt/chico-sqlite-purge-removals.txt \
+    && cat /opt/chico-sqlite-reverse-dependencies.txt /opt/chico-sqlite-purge-simulation.txt /opt/chico-sqlite-purge-removals.txt \
     && test "$(cat /opt/chico-sqlite-purge-removals.txt)" = 'libsqlite3-0' \
     && apt-get purge -y libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
