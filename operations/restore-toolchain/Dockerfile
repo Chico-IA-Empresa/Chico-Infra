@@ -38,7 +38,8 @@ RUN sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.s
     && rm -f /usr/local/bin/gosu
 COPY --from=build /usr/local/bin/pgbackrest /usr/local/bin/pgbackrest
 COPY --from=build /build-provenance /opt/chico-toolchain/build
-RUN mkdir -p /opt/chico-toolchain \
+RUN set -eux \
+    && mkdir -p /opt/chico-toolchain \
     && test ! -e /usr/local/bin/gosu \
     && ! command -v python3 \
     && ! test -e /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 \

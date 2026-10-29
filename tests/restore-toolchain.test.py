@@ -155,6 +155,60 @@ class SyntheticDiagnosticsTests(unittest.TestCase):
         self.assertIn("configuration diagnostic redacted", joined)
 
 
+class CloneRunnerContractTests(unittest.TestCase):
+    def fixtures(self, directory):
+        root = Path(directory).resolve()
+        paths = {target: root / name for target, name in [
+            ("/pgdata", "pgdata"), ("/repo", "repo"), ("/config", "pgbackrest.conf"), ("/scripts/clone", "templates")]}
+        for target, path in paths.items():
+            if target == "/config":
+                path.write_text("synthetic-private-file")
+            else:
+                path.mkdir()
+        return paths
+
+    def command(self, mounts, *, arguments=None, uid=999):
+        return runner.isolated_command("sha256:" + "a" * 64, uid, mounts,
+            "/usr/lib/postgresql/16/bin/postgres",
+            arguments if arguments is not None else ["-D", "/pgdata", "-c", "config_file=/scripts/clone/postgresql.conf"])
+
+    def test_exact_clone_start_accepts_only_individual_config_and_readonly_templates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            command = self.command(self.fixtures(directory))
+        for target in ["/repo", "/config", "/scripts/clone"]:
+            self.assertTrue(any(value.endswith("dst=" + target + ",readonly") for value in command))
+        self.assertTrue(any(value.endswith("dst=/pgdata") for value in command))
+        self.assertFalse(any("dst=/scripts," in value for value in command))
+        self.assertIn("--network=none", command)
+        self.assertIn("--cap-drop=ALL", command)
+        self.assertTrue(any(value.startswith("/var/lib/postgresql/data:") for value in command))
+
+    def test_clone_rejects_extra_or_changed_arguments_and_uid(self):
+        variants = [["-D", "/other", "-c", "config_file=/scripts/clone/postgresql.conf"],
+                    ["-D", "/pgdata", "-c", "config_file=/other.conf"],
+                    ["-D", "/pgdata", "-c", "config_file=/scripts/clone/postgresql.conf", "-c", "shared_preload_libraries=other"], []]
+        with tempfile.TemporaryDirectory() as directory:
+            mounts = self.fixtures(directory)
+            for arguments in variants:
+                with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+                    self.command(mounts, arguments=arguments)
+            with self.assertRaises(ValueError):
+                self.command(mounts, uid=1000)
+
+    def test_clone_rejects_parent_or_secret_directory_mounts_and_wrong_source_types(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mounts = self.fixtures(directory)
+            for target in ["/scripts", "/run", "/tmp", "/", "/var/run/docker.sock", "/evidence"]:
+                with self.subTest(target=target), self.assertRaises(ValueError):
+                    self.command({**mounts, target: Path(directory).resolve()})
+            for target in mounts:
+                with self.subTest(target=target), self.assertRaises(ValueError):
+                    replacement = mounts["/pgdata"] if target == "/config" else mounts["/config"]
+                    self.command({**mounts, target: replacement})
+            with self.assertRaises(ValueError):
+                self.command({key: value for key, value in mounts.items() if key != "/repo"})
+
+
 class ZlibTechnicalStatementTests(unittest.TestCase):
     def evidence(self, **changes):
         arguments = {"image_id": "sha256:" + "b" * 64,
