@@ -307,13 +307,13 @@
     "check": "CKV_AWS_126",
     "resource": "module.dev_box[0].aws_instance.this",
     "reason": "Dev usa métricas EC2 padrão de cinco minutos; detailed monitoring pago não integra o baseline.",
-    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos. Revisão fase 1: CPU Standard evita excedentes; volume parametrizado 30–80 GiB mantém criptografia/retenção/IMDSv2 e coleta padrão de métricas. Atualização revisada de userData usa parada/inicialização da mesma instância, preservando o root retido; não autoriza substituição do host.",
-    "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md; docs/dev-ci-provisioning-recovery.md",
+    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos. Revisão fase 1: CPU Standard evita excedentes; volume parametrizado 30–80 GiB mantém criptografia/retenção/IMDSv2 e coleta padrão de métricas. Atualização revisada de userData usa parada/inicialização da mesma instância, preservando o root retido; não autoriza substituição do host. Revisão EIP: somente associate_public_ip_address é ignorado após leitura de associação da ENI; lançamento continua false, EIP separado e prevent_destroy/volume/userData permanecem gerenciados e protegidos. Sem alteração de monitoramento ou da validade desta exceção.",
+    "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md; docs/dev-ci-provisioning-recovery.md; docs/dev-eip-refresh-recovery.md",
     "reviewedBy": "Codex technical review",
-    "reviewedAt": "2026-10-28",
+    "reviewedAt": "2026-10-29",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/dev-box/main.tf",
-    "sourceSha256": "041f1760617791b28d2ccef190cfe34acde8449ade7f5d1c9e02b17234bf992c"
+    "sourceSha256": "9d2d41c2f98cc85b9cf4f4bae6bf7468d4ade150b3e9a5b9c17637018154cfba"
   },
   {
     "scope": "dev",

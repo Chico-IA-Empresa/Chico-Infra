@@ -89,6 +89,9 @@ resource "aws_instance" "this" {
   volume_tags = { project = "chicoai", env = "dev" }
   lifecycle {
     prevent_destroy = true
+    # Provider Read reports any primary ENI association, including our separate
+    # EIP, as true. Keep false at launch; do not replace for that presence flag.
+    ignore_changes = [associate_public_ip_address]
     precondition {
       condition     = data.aws_ami.selected.architecture == "arm64" && data.aws_ami.selected.state == "available" && startswith(data.aws_ami.selected.name, "al2023-ami-")
       error_message = "AMI Amazon Linux 2023 ARM64 disponível exigida pelo bootstrap."
