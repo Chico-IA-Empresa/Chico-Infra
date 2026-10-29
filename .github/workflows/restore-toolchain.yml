@@ -35,6 +35,7 @@ jobs:
         run: |
           python tests/restore-toolchain.test.py
           python tests/restore-zlib-vex.test.py
+          python tests/restore-zlib-vex-collector.test.py
           bash -n operations/restore-toolchain/fixture_prepare.sh
       - name: Build immutable-source amd64 toolchain without AWS credentials
         run: |
@@ -80,7 +81,7 @@ jobs:
           set -euo pipefail
           trivy version --format json > "$RUNNER_TEMP/restore-toolchain-public/scanner.json"
           trivy image --scanners vuln --format json \
-            --output "$RUNNER_TEMP/restore-toolchain-public/scan.json" chico-restore-toolchain:synthetic
+            --output "$RUNNER_TEMP/restore-toolchain-public/scan.json" "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")"
           python - "$RUNNER_TEMP/restore-toolchain-public/scan.json" <<'PY'
           import json, sys
           report = json.load(open(sys.argv[1]))
@@ -91,6 +92,20 @@ jobs:
                             'highFindings': sum(v.get('Severity') == 'HIGH' for v in vulnerabilities),
                             'realRestoreApproved': False}))
           PY
+      - name: Collect current package evidence without changing scan gate
+        if: always()
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/restore-toolchain-public/scan.json"
+          test -s "$RUNNER_TEMP/restore-toolchain-image-id"
+          test -x /usr/bin/gpgv
+          timeout 180 docker pull --platform=linux/amd64 postgres@sha256:57c55aefb81a937d21171b7c2266264b5552cb1a4f90459bbdfc417a36883a4d
+          python operations/restore-toolchain/zlib_vex_collect.py \
+            --image-id "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
+            --scan "$RUNNER_TEMP/restore-toolchain-public/scan.json" \
+            --evidence "$RUNNER_TEMP/restore-toolchain-public/zlib-package-evidence-review.json"
       - name: Publish only synthetic summary, package/binary provenance and scan
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -109,6 +124,7 @@ jobs:
             ${{ runner.temp }}/restore-toolchain-public/verify-1.txt
             ${{ runner.temp }}/restore-toolchain-public/verify-corrupt.txt
             ${{ runner.temp }}/restore-toolchain-public/zlib-vex-proposal.json
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-evidence-review.json
             ${{ runner.temp }}/restore-toolchain-public/zlib-package-inventory.txt
             ${{ runner.temp }}/restore-toolchain-public/zlib-package-files.txt
             ${{ runner.temp }}/restore-toolchain-runner-ca.sha256
