@@ -4,12 +4,14 @@ on:
     paths:
       - operations/restore-toolchain/**
       - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
       - .github/workflows/restore-toolchain.yml
   push:
     branches: [main]
     paths:
       - operations/restore-toolchain/**
       - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
       - .github/workflows/restore-toolchain.yml
   workflow_dispatch:
 permissions:
@@ -32,6 +34,7 @@ jobs:
       - name: Offline parser and isolation contracts
         run: |
           python tests/restore-toolchain.test.py
+          python tests/restore-zlib-vex.test.py
           bash -n operations/restore-toolchain/fixture_prepare.sh
       - name: Build immutable-source amd64 toolchain without AWS credentials
         run: |
