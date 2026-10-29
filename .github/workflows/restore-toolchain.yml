@@ -1,0 +1,130 @@
+name: Restore toolchain synthetic checks
+on:
+  pull_request:
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
+      - .github/workflows/restore-toolchain.yml
+  push:
+    branches: [main]
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
+      - .github/workflows/restore-toolchain.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-toolchain-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    name: PG16 pgBackRest synthetic recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Offline parser and isolation contracts
+        run: |
+          python tests/restore-toolchain.test.py
+          python tests/restore-zlib-vex.test.py
+          python tests/restore-zlib-vex-collector.test.py
+          bash -n operations/restore-toolchain/fixture_prepare.sh
+      - name: Build immutable-source amd64 toolchain without AWS credentials
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
+          sha256sum operations/restore-toolchain/runner-ca.crt > "$RUNNER_TEMP/restore-toolchain-runner-ca.sha256"
+          docker build --platform=linux/amd64 --pull --tag chico-restore-toolchain:synthetic operations/restore-toolchain
+          docker image inspect chico-restore-toolchain:synthetic --format '{{.Id}}' > "$RUNNER_TEMP/restore-toolchain-image-id"
+      - name: Real binary encrypted full/diff verify, corruption rejection and isolated recovery
+        run: |
+          set -euo pipefail
+          sudo "$(command -v python)" tests/restore-toolchain-integration.py \
+            --image "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
+            --evidence "$RUNNER_TEMP/restore-toolchain-evidence"
+      - name: Export only synthetic allowlist to runner-owned directory
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
+          for name in summary.json failure-summary.json provenance.txt verify-0.txt verify-1.txt verify-corrupt.txt zlib-vex-proposal.json zlib-package-inventory.txt zlib-package-files.txt; do
+            source="$RUNNER_TEMP/restore-toolchain-evidence/$name"
+            if sudo test -f "$source"; then
+              sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" "$source" "$RUNNER_TEMP/restore-toolchain-public/$name"
+            fi
+          done
+      - name: Install pinned official scanner binary without a third-party Action
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            -o "$RUNNER_TEMP/trivy-linux-amd64.tar.gz"
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $RUNNER_TEMP/trivy-linux-amd64.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trivy-linux-amd64.tar.gz" -C "$RUNNER_TEMP/trivy-bin" trivy
+          chmod 0755 "$RUNNER_TEMP/trivy-bin/trivy"
+          printf '%s\n' "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+          sha256sum "$RUNNER_TEMP/trivy-bin/trivy" > "$RUNNER_TEMP/restore-toolchain-public/scanner-binary.sha256"
+      - name: Known vulnerability inventory; critical findings block
+        run: |
+          set -euo pipefail
+          trivy version --format json > "$RUNNER_TEMP/restore-toolchain-public/scanner.json"
+          trivy image --scanners vuln --format json \
+            --output "$RUNNER_TEMP/restore-toolchain-public/scan.json" "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")"
+          python - "$RUNNER_TEMP/restore-toolchain-public/scan.json" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          assert report.get('SchemaVersion') == 2 and report.get('Results'), 'Unknown scan report'
+          vulnerabilities = [v for result in report['Results'] for v in result.get('Vulnerabilities', [])]
+          assert not any(v.get('Severity') == 'CRITICAL' for v in vulnerabilities), 'Critical findings require remediation/review'
+          print(json.dumps({'scanCompleted': True, 'criticalFindings': 0,
+                            'highFindings': sum(v.get('Severity') == 'HIGH' for v in vulnerabilities),
+                            'realRestoreApproved': False}))
+          PY
+      - name: Collect current package evidence without changing scan gate
+        if: always()
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/restore-toolchain-public/scan.json"
+          test -s "$RUNNER_TEMP/restore-toolchain-image-id"
+          test -x /usr/bin/gpgv
+          timeout 180 docker pull --platform=linux/amd64 postgres@sha256:57c55aefb81a937d21171b7c2266264b5552cb1a4f90459bbdfc417a36883a4d
+          python operations/restore-toolchain/zlib_vex_collect.py \
+            --image-id "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
+            --scan "$RUNNER_TEMP/restore-toolchain-public/scan.json" \
+            --evidence "$RUNNER_TEMP/restore-toolchain-public/zlib-package-evidence-review.json"
+      - name: Publish only synthetic summary, package/binary provenance and scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: restore-toolchain-synthetic-evidence
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/restore-toolchain-public/summary.json
+            ${{ runner.temp }}/restore-toolchain-public/failure-summary.json
+            ${{ runner.temp }}/restore-toolchain-public/provenance.txt
+            ${{ runner.temp }}/restore-toolchain-public/scan.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner-binary.sha256
+            ${{ runner.temp }}/restore-toolchain-public/verify-0.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-1.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-corrupt.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-vex-proposal.json
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-evidence-review.json
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-inventory.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-files.txt
+            ${{ runner.temp }}/restore-toolchain-runner-ca.sha256
