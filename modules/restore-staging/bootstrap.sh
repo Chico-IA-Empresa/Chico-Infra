@@ -36,11 +36,12 @@ if test "$(date -u +%s)" -ge "$(date -u -d "$CHICO_STAGE_EXPIRES_UTC" +%s)"; the
 fi
 
 task_try=0
-until dnf install -y docker curl jq python3 awscli2 amazon-ssm-agent zstd openssl; do
+until dnf install -y docker curl-minimal jq python3 awscli-2 amazon-ssm-agent zstd openssl; do
   task_try=$((task_try + 1))
   test "$task_try" -lt 10
   sleep 15
 done
+[[ "$(aws --version 2>&1)" == aws-cli/2.* ]]
 systemctl enable --now docker amazon-ssm-agent
 if test -d /srv/chico-restore && test -n "$(find /srv/chico-restore -mindepth 1 -print -quit)"; then
   echo 'nonempty staging directory requires explicit review'

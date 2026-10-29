@@ -1,0 +1,57 @@
+name: Restore private configuration synthetic checks
+on:
+  pull_request:
+    paths:
+      - operations/restore-staging/**
+      - tests/restore-private-config*
+      - .github/workflows/restore-private-config.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-private-config-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    name: PG16 isolated clone configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Private configuration and startup template contracts
+        run: |
+          python tests/restore-private-config.test.py
+          bash -n operations/restore-staging/test-clone-startup.sh
+          bash -n modules/restore-staging/bootstrap.sh
+      - name: Demonstrate PG16 config precedence and suppress role preloads
+        env:
+          CHICO_CLONE_INTEGRATION: 'true'
+        run: |
+          sudo --preserve-env=CHICO_CLONE_INTEGRATION "$(command -v python)" \
+            tests/restore-private-config-integration.py \
+            --evidence "$RUNNER_TEMP/clone-configuration-synthetic"
+      - name: Export only synthetic booleans and binary provenance
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clone-configuration-public"
+          for relative in summary.json private/postgres-binary.sha256; do
+            source="$RUNNER_TEMP/clone-configuration-synthetic/$relative"
+            if sudo test -f "$source"; then
+              sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" \
+                "$source" "$RUNNER_TEMP/clone-configuration-public/$(basename "$relative")"
+            fi
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: clone-configuration-synthetic
+          retention-days: 7
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/clone-configuration-public/*
