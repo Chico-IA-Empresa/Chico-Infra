@@ -27,6 +27,10 @@ run "host_safety" {
     condition     = one(aws_instance.this.root_block_device).encrypted && !one(aws_instance.this.root_block_device).delete_on_termination && one(aws_instance.this.root_block_device).volume_size == 30
     error_message = "Baseline de dados deve ser criptografado e retido."
   }
+  assert {
+    condition     = !aws_instance.this.user_data_replace_on_change
+    error_message = "User data remains managed with in-place stop/start, never automatic replacement."
+  }
 }
 run "approved_capacity_delta" {
   command = plan
