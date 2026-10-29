@@ -40,7 +40,9 @@ RUN sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.s
     && apt-get -s purge libsqlite3-0 > /opt/chico-sqlite-purge-simulation.txt \
     && awk '$1 == "Remv" || $1 == "Purg" { sub(/:amd64$/, "", $2); print $2 }' /opt/chico-sqlite-purge-simulation.txt | LC_ALL=C sort -u > /opt/chico-sqlite-purge-removals.txt \
     && cat /opt/chico-sqlite-reverse-dependencies.txt /opt/chico-sqlite-purge-simulation.txt /opt/chico-sqlite-purge-removals.txt \
-    && test "$(cat /opt/chico-sqlite-purge-removals.txt)" = 'libsqlite3-0' \
+    && printf '%s\n' gnupg gpg gpg-wks-client gpg-wks-server libsqlite3-0 > /opt/chico-sqlite-purge-allowed.txt \
+    && test "$(cat /opt/chico-sqlite-purge-removals.txt)" = "$(cat /opt/chico-sqlite-purge-allowed.txt)" \
+    && printf '%s\n' 'Reviewed from CI40861184459: SQLite reverse dependency is unused gpg; exact5 removals approved by coordinator. No autoremove; gpgv retained; APT verification precedes purge.' > /opt/chico-sqlite-removal-review.txt \
     && apt-get purge -y libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/local/bin/gosu
@@ -49,6 +51,7 @@ COPY --from=build /build-provenance /opt/chico-toolchain/build
 RUN set -eux \
     && mkdir -p /opt/chico-toolchain \
     && test ! -e /usr/local/bin/gosu \
+    && command -v gpgv \
     && ! command -v python3 \
     && ! test -e /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 \
     && test "$(pgbackrest version)" = 'pgBackRest 2.57.0' \
