@@ -16,6 +16,7 @@ def load(name):
 
 verify = load("verify_report")
 runner = load("isolated_run")
+vex = load("zlib_vex_proposal")
 LABEL = "20261028-000000F"
 # Grammar comes from pinned verify.c. This sample is not claimed as binary output.
 SAMPLE = f"""stanza: fixture
@@ -152,6 +153,37 @@ class SyntheticDiagnosticsTests(unittest.TestCase):
         self.assertIn("<REDACTED>", joined)
         self.assertIn("CHICO_SYNTHETIC_STAGE=full-backup", joined)
         self.assertIn("configuration diagnostic redacted", joined)
+
+
+class ZlibTechnicalStatementTests(unittest.TestCase):
+    def evidence(self, **changes):
+        arguments = {"image_id": "sha256:" + "b" * 64,
+                     "package_inventory": "zlib1g\t1:1.2.13.dfsg-1\tamd64\tii \n",
+                     "package_files": "/lib/x86_64-linux-gnu/libz.so.1.2.13\n",
+                     "binary": b"\x7fELFsynthetic-unit-only",
+                     "dynamic_symbols": "1: 000 FUNC GLOBAL DEFAULT deflate\n",
+                     "dynamic_section": "SONAME Shared library: [libz.so.1]"}
+        return vex.proposal(**{**arguments, **changes})
+
+    def test_statement_is_image_package_binary_bound_and_never_overrides_gate(self):
+        statement = self.evidence()
+        self.assertEqual(statement["imageId"], "sha256:" + "b" * 64)
+        self.assertEqual(len(statement["librarySHA256"]), 64)
+        self.assertTrue(statement["reviewRequired"])
+        self.assertFalse(statement["gateOverrideApplied"])
+        self.assertFalse(statement["rawScanModified"])
+
+    def test_changed_scope_or_minizip_presence_rejects_statement(self):
+        changes = [{"image_id": "mutable:tag"},
+                   {"package_inventory": "zlib1g\t1:1.2.13.dfsg-2\tamd64\tii \n"},
+                   {"package_inventory": "zlib1g\t1:1.2.13.dfsg-1\tarm64\tii \n"},
+                   {"package_inventory": "zlib1g\t1:1.2.13.dfsg-1\tamd64\tii \nlibminizip1\t1.1\tamd64\tii \n"},
+                   {"package_files": "/usr/lib/libminizip.so\n"},
+                   {"dynamic_symbols": "zipOpenNewFileInZip4_64\n"},
+                   {"dynamic_symbols": ""}, {"dynamic_section": "wrong-soname"}]
+        for change in changes:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.evidence(**change)
 
 
 if __name__ == "__main__":

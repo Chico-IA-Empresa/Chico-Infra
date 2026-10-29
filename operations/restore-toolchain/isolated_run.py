@@ -11,7 +11,7 @@ def isolated_command(image, uid, mounts, entrypoint, arguments):
         raise ValueError("Immutable local image id or registry digest required")
     if type(uid) is not int or uid <= 0:
         raise ValueError("Nonroot numeric image UID required")
-    if entrypoint not in {"/bin/bash", "/usr/bin/id", "/usr/local/bin/pgbackrest", "/usr/bin/python3"}:
+    if entrypoint not in {"/bin/bash", "/usr/bin/id", "/usr/local/bin/pgbackrest"}:
         raise ValueError("Unreviewed entrypoint")
     argv = ["docker", "run", "--rm", "--network=none", "--read-only", "--cap-drop=ALL",
             "--security-opt=no-new-privileges", "--user", str(uid), "--pids-limit=256",

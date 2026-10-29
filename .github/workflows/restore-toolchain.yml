@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
-          for name in summary.json failure-summary.json provenance.txt verify-0.txt verify-1.txt verify-corrupt.txt; do
+          for name in summary.json failure-summary.json provenance.txt verify-0.txt verify-1.txt verify-corrupt.txt zlib-vex-proposal.json zlib-package-inventory.txt zlib-package-files.txt; do
             source="$RUNNER_TEMP/restore-toolchain-evidence/$name"
             if sudo test -f "$source"; then
               sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" "$source" "$RUNNER_TEMP/restore-toolchain-public/$name"
@@ -105,4 +105,7 @@ jobs:
             ${{ runner.temp }}/restore-toolchain-public/verify-0.txt
             ${{ runner.temp }}/restore-toolchain-public/verify-1.txt
             ${{ runner.temp }}/restore-toolchain-public/verify-corrupt.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-vex-proposal.json
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-inventory.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-files.txt
             ${{ runner.temp }}/restore-toolchain-runner-ca.sha256

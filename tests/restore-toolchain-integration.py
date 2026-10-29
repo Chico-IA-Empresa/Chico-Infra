@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 import re
+import secrets
 import shutil
 import struct
 import subprocess
@@ -33,6 +34,7 @@ def load(name):
 
 runner = load("isolated_run")
 report = load("verify_report")
+zlib_vex = load("zlib_vex_proposal")
 
 
 def execute(command, output=None, must_succeed=True):
@@ -119,15 +121,46 @@ def main():
     if b"16.13" not in provenance.stdout:
         raise ValueError("Unexpected PostgreSQL version")
 
+    # Technical VEX proposal only: it cannot hide or accept any raw scanner finding.
+    zlib_inventory = run(["-ceu", "dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\t${db:Status-Abbrev}\n'"],
+                         filename="zlib-package-inventory.txt")
+    zlib_files = run(["-ceu", "dpkg -L zlib1g"], filename="zlib-package-files.txt")
+    zlib_binary = run(["-ceu", "cat /lib/x86_64-linux-gnu/libz.so.1"], filename="zlib-runtime-library.so")
+    CURRENT_STAGE = "zlib-elf-proof"
+    symbol_result = execute(["readelf", "--dyn-syms", "--wide", str(evidence / "zlib-runtime-library.so")])
+    soname_result = execute(["readelf", "--dynamic", "--wide", str(evidence / "zlib-runtime-library.so")])
+    vex = zlib_vex.proposal(image_id=args.image, package_inventory=zlib_inventory.stdout.decode(),
+        package_files=zlib_files.stdout.decode(), binary=zlib_binary.stdout,
+        dynamic_symbols=symbol_result.stdout.decode(), dynamic_section=soname_result.stdout.decode())
+    (evidence / "zlib-vex-proposal.json").write_text(json.dumps(vex, indent=2) + "\n")
+
     work = evidence / "fixture"
     private_directory(work, uid)
-    run(["/scripts/fixture_prepare.sh"], extra={"/work": work}, filename="prepare.log")
-    labels = json.loads((work / "labels.json").read_text())
+    # Generate and parse on the trusted host; the offline container needs no Python/SQLite runtime.
+    cipher = secrets.token_urlsafe(48)
+    cipher_path = work / "cipher-fixture-only"
+    cipher_path.write_text(cipher)
+    os.chmod(cipher_path, 0o600)
+    os.chown(cipher_path, uid, uid)
+    prepare_config = evidence / "prepare-config"
+    private_directory(prepare_config, uid)
+    prepare_file = prepare_config / "pgbackrest.conf"
+    prepare_file.write_text("[global]\nrepo1-path=/work/repo\nrepo1-cipher-type=aes-256-cbc\n"
+        "repo1-cipher-pass=" + cipher + "\nrepo1-retention-full=2\nrepo1-bundle=n\nrepo1-block=n\n"
+        "compress-type=gz\nprocess-max=2\nlog-level-console=off\nlog-level-file=off\n"
+        "lock-path=/tmp/pgbackrest\nspool-path=/tmp/pgbackrest\n[fixture]\npg1-path=/work/pg\npg1-socket-path=/tmp/socket\n")
+    os.chmod(prepare_file, 0o600)
+    os.chown(prepare_file, uid, uid)
+    run(["/scripts/fixture_prepare.sh"], extra={"/work": work, "/config": prepare_config}, filename="prepare.log")
+    fixture_info = json.loads((work / "info.json").read_text())[0]
+    backups = fixture_info["backup"]
+    if len(backups) != 2 or [backup["type"] for backup in backups] != ["full", "diff"]:
+        raise ValueError("Invalid generated backup types")
+    labels = [backup["label"] for backup in backups]
     if len(labels) != 2 or any(not report.LABEL.fullmatch(label) for label in labels):
         raise ValueError("Invalid generated full/diff chain")
     config = evidence / "config"
     private_directory(config, uid)
-    cipher = (work / "cipher-fixture-only").read_text()
     (config / "pgbackrest.conf").write_text("[global]\nrepo1-path=/repo\nrepo1-cipher-type=aes-256-cbc\n"
         "repo1-cipher-pass=" + cipher + "\nlog-level-console=off\nlog-level-file=off\n"
         "lock-path=/tmp\nspool-path=/tmp\nprocess-max=2\n[fixture]\npg1-path=/pgdata\npg1-socket-path=/tmp/socket\n")

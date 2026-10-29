@@ -31,11 +31,17 @@ COPY runner-ca.crt /etc/ssl/certs/ca-certificates.crt
 RUN sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.sha256 \
     && sed -i 's|http://|https://|g' /etc/apt/sources.list.d/* \
     && apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libbz2-1.0 liblz4-1 libxml2 libzstd1 python3 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends ca-certificates libbz2-1.0 liblz4-1 libxml2 libzstd1 \
+       libgnutls30=3.7.9-2+deb12u7 libperl5.36=5.36.0-7+deb12u4 \
+       perl=5.36.0-7+deb12u4 perl-base=5.36.0-7+deb12u4 perl-modules-5.36=5.36.0-7+deb12u4 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/local/bin/gosu
 COPY --from=build /usr/local/bin/pgbackrest /usr/local/bin/pgbackrest
 COPY --from=build /build-provenance /opt/chico-toolchain/build
 RUN mkdir -p /opt/chico-toolchain \
+    && test ! -e /usr/local/bin/gosu \
+    && ! command -v python3 \
+    && ! test -e /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 \
     && test "$(pgbackrest version)" = 'pgBackRest 2.57.0' \
     && postgres --version | grep -E '^postgres \(PostgreSQL\) 16\.13([ .]|$)' \
     && dpkg-query -W -f='${Package}\t${Version}\n' | LC_ALL=C sort > /opt/chico-toolchain/packages.tsv \
