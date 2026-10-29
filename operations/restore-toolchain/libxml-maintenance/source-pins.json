@@ -1,0 +1,11 @@
+{
+  "source": "libxml2",
+  "version": "2.9.14+dfsg-1.3ubuntu3.10",
+  "suite": "noble-security",
+  "directory": "pool/main/libx/libxml2",
+  "files": {
+    "libxml2_2.9.14+dfsg.orig.tar.xz": {"size": 2351200, "sha256": "4fe913dec8b1ab89d13b489b419a8203176ea39e931eaa0d25b17eafb9c279e9"},
+    "libxml2_2.9.14+dfsg-1.3ubuntu3.10.debian.tar.xz": {"size": 61552, "sha256": "d2d821830eb60edbcfcbe30e2827420e9e439e98c85c812352969cdda764d60b"},
+    "libxml2_2.9.14+dfsg-1.3ubuntu3.10.dsc": {"size": 3083, "sha256": "1e2a56b4ae292abd2715b1f411cfa30f1b31ef9013c60d2f906d4a68b165cd4c"}
+  }
+}

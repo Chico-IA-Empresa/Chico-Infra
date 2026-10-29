@@ -1,0 +1,231 @@
+name: Libxml benign maintenance comparison
+on:
+  pull_request:
+    paths:
+      - .github/workflows/libxml-maintenance.yml
+      - docs/restore-libxml-maintenance.md
+      - operations/restore-toolchain/libxml-maintenance/.dockerignore
+      - operations/restore-toolchain/libxml-maintenance/.gitignore
+      - operations/restore-toolchain/libxml-maintenance/acquire.py
+      - operations/restore-toolchain/libxml-maintenance/assess.py
+      - operations/restore-toolchain/libxml-maintenance/build.sh
+      - operations/restore-toolchain/libxml-maintenance/Dockerfile
+      - operations/restore-toolchain/libxml-maintenance/layout.c
+      - operations/restore-toolchain/libxml-maintenance/normal-smoke.sh
+      - operations/restore-toolchain/libxml-maintenance/prepare_context.py
+      - operations/restore-toolchain/libxml-maintenance/source-pins.json
+      - operations/restore-toolchain/libxml-maintenance/xml-normal.c
+      - tests/restore-libxml-maintenance.test.py
+      - tests/restore-libxml-maintenance-integration.py
+      - operations/restore-toolchain/Dockerfile
+      - operations/restore-toolchain/isolated_run.py
+      - operations/restore-toolchain/zlib_vex_collect.py
+      - operations/restore-toolchain/zlib_vex_review.py
+      - operations/restore-toolchain/zlib_vex_proposal.py
+      - operations/restore-toolchain/verify_report.py
+      - tests/restore-toolchain.test.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: libxml-maintenance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  maintenance:
+    name: Benign source and ABI comparison; no remediation approval
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Initialize restricted publication directory and blocked report
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -m 0700 "$RUNNER_TEMP/libxml-maintenance-public"
+          python - "$RUNNER_TEMP/libxml-maintenance-public/report.json" <<'PY'
+          import json, pathlib, sys
+          report = {'schemaVersion': 1, 'status': 'blocked_pending_abi_and_scan_review',
+                    'ordinarySmokePassed': False, 'fullABICompatibilityProven': False,
+                    'defaultLibraryReplaced': False, 'packageVersionChanged': False,
+                    'riskAccepted': False, 'gateOverrideApplied': False,
+                    'rawScanModified': False, 'realRestoreApproved': False,
+                    'evidenceCollectionComplete': False}
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(report, indent=2) + '\n')
+          PY
+      - name: Offline benign metadata and isolation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/restore-libxml-maintenance.test.py
+          python tests/restore-toolchain.test.py
+          bash -n operations/restore-toolchain/libxml-maintenance/build.sh
+          bash -n operations/restore-toolchain/libxml-maintenance/normal-smoke.sh
+      - name: Authenticate pinned complete Ubuntu sources with runner keyring
+        id: acquire
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x /usr/bin/gpgv
+          test -s /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          python operations/restore-toolchain/libxml-maintenance/acquire.py \
+            --destination "$PWD/operations/restore-toolchain/libxml-maintenance/verified-sources"
+      - name: Prepare exact baseline and isolated sidecar build context
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_context=operations/restore-toolchain/libxml-maintenance
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt "$task_context/runner-ca.crt"
+          sha256sum "$task_context/runner-ca.crt" > "$RUNNER_TEMP/libxml-maintenance-public/runner-ca.sha256"
+          python "$task_context/prepare_context.py"
+      - name: Build sidecar comparison without replacing baseline library
+        id: build
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_context=operations/restore-toolchain/libxml-maintenance
+          docker build --platform=linux/amd64 --pull -f "$task_context/Dockerfile.combined" \
+            --tag chico-libxml-maintenance:synthetic "$task_context"
+          docker image inspect chico-libxml-maintenance:synthetic --format '{{.Id}}' \
+            > "$RUNNER_TEMP/libxml-maintenance-image-id"
+          grep -Ex 'sha256:[a-f0-9]{64}' "$RUNNER_TEMP/libxml-maintenance-image-id"
+      - name: Ordinary well-formed XML, SQLXML and fresh offline backup recovery
+        id: smoke
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo --preserve-env=GITHUB_REPOSITORY,GITHUB_SHA,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT \
+            env CHICO_LIBXML_MAINTENANCE=true "$(command -v python)" \
+            tests/restore-libxml-maintenance-integration.py \
+            --image "$(cat "$RUNNER_TEMP/libxml-maintenance-image-id")" \
+            --evidence "$RUNNER_TEMP/libxml-maintenance-private-new"
+      - name: Install exact pinned official Trivy without third-party Action
+        id: scanner
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/libxml-maintenance-trivy-bin"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            -o "$RUNNER_TEMP/libxml-maintenance-trivy.tar.gz"
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $RUNNER_TEMP/libxml-maintenance-trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/libxml-maintenance-trivy.tar.gz" -C "$RUNNER_TEMP/libxml-maintenance-trivy-bin" trivy
+          chmod 0755 "$RUNNER_TEMP/libxml-maintenance-trivy-bin/trivy"
+          printf '%s\n' "$RUNNER_TEMP/libxml-maintenance-trivy-bin" >> "$GITHUB_PATH"
+          sha256sum "$RUNNER_TEMP/libxml-maintenance-trivy-bin/trivy" \
+            > "$RUNNER_TEMP/libxml-maintenance-public/scanner-binary.sha256"
+          sha256sum "$RUNNER_TEMP/libxml-maintenance-trivy.tar.gz" \
+            > "$RUNNER_TEMP/libxml-maintenance-public/scanner-archive.sha256"
+      - name: Scan immutable comparison image; unchanged critical gate
+        id: scan
+        if: ${{ always() && steps.build.outcome == 'success' && steps.scanner.outcome == 'success' }}
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image --scanners vuln --format json --ignorefile /dev/null \
+            --output "$RUNNER_TEMP/libxml-maintenance-public/scan.json" \
+            "$(cat "$RUNNER_TEMP/libxml-maintenance-image-id")"
+          trivy version --format json > "$RUNNER_TEMP/libxml-maintenance-public/scanner.json"
+          python - "$RUNNER_TEMP/libxml-maintenance-public/scan.json" "$RUNNER_TEMP/libxml-maintenance-image-id" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          assert report.get('SchemaVersion') == 2 and report.get('Results'), 'Unknown scan report'
+          expected_image = open(sys.argv[2]).read().strip()
+          assert report.get('Metadata', {}).get('ImageID') == expected_image, 'Scan image binding differs'
+          assert report.get('Metadata', {}).get('OS', {}).get('Family') == 'debian', 'Unknown base OS'
+          assert any(r.get('Class') == 'os-pkgs' and r.get('Type') == 'debian' for r in report['Results']), 'Missing OS package scan'
+          vulnerabilities = [v for result in report['Results'] for v in result.get('Vulnerabilities', [])]
+          assert not any(v.get('Severity') == 'CRITICAL' for v in vulnerabilities), 'Critical findings require remediation/review'
+          print(json.dumps({'scanCompleted': True, 'criticalFindings': 0,
+                            'highFindings': sum(v.get('Severity') == 'HIGH' for v in vulnerabilities),
+                            'realRestoreApproved': False}))
+          PY
+      - name: Export only reviewed report, provenance and bounded benign hashes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_public="$RUNNER_TEMP/libxml-maintenance-public"
+          mkdir -p "$task_public"
+          sudo "$(command -v python)" - "$RUNNER_TEMP/libxml-maintenance-private-new" \
+            "$task_public" "$PWD/operations/restore-toolchain/libxml-maintenance" \
+            "$(id -u)" "$(id -g)" <<'PY'
+          import json, os, pathlib, re, stat, sys
+          private, public, source = map(pathlib.Path, sys.argv[1:4])
+          owner, group = map(int, sys.argv[4:6])
+          def read(path, maximum=1048576):
+              if path.is_symlink() or not path.is_file():
+                  raise ValueError('Regular allowlisted file required')
+              info = path.stat()
+              if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > maximum:
+                  raise ValueError('Bounded allowlisted metadata required')
+              return path.read_bytes()
+          def publish(name, data):
+              destination = public / name
+              if destination.is_symlink():
+                  raise ValueError('Publication symlink refused')
+              destination.write_bytes(data)
+              os.chmod(destination, 0o644)
+              os.chown(destination, owner, group)
+          report_path = private / 'libxml-maintenance-review.json'
+          if report_path.exists():
+              raw = read(report_path)
+              report = json.loads(raw)
+              assert report.get('status') == 'blocked_pending_abi_and_scan_review'
+              for flag in ('fullABICompatibilityProven', 'defaultLibraryReplaced', 'packageVersionChanged',
+                           'riskAccepted', 'gateOverrideApplied', 'rawScanModified', 'realRestoreApproved'):
+                  assert report.get(flag) is False, 'Unexpected approval claim'
+              publish('report.json', raw)
+          provenance_path = source / 'verified-sources/provenance.json'
+          if provenance_path.exists():
+              raw = read(provenance_path)
+              provenance = json.loads(raw)
+              assert provenance.get('repositorySignatureVerified') is True
+              assert provenance.get('sourceVersion') == '2.9.14+dfsg-1.3ubuntu3.10'
+              publish('source-provenance.json', raw)
+          publish('source-pins.json', read(source / 'source-pins.json', 16384))
+          allowed_paths = {
+              'runtime.sha256': {'/lib/x86_64-linux-gnu/libc.so.6', '/usr/lib/postgresql/16/bin/postgres'},
+              'library-sha256.txt': {'/baseline/libxml2.so.2', '/opt/chico-libxml-candidate/lib/libxml2.so.2'},
+          }
+          for name, paths in allowed_paths.items():
+              path = private / name
+              if not path.exists():
+                  continue
+              raw = read(path, 4096)
+              lines = raw.decode('ascii').splitlines()
+              pairs = [line.split() for line in lines]
+              assert len(pairs) == len(paths) and all(len(pair) == 2 for pair in pairs)
+              assert {pair[1] for pair in pairs} == paths
+              assert all(re.fullmatch(r'[a-f0-9]{64}', pair[0]) for pair in pairs)
+              publish(name, raw)
+          PY
+      - name: Publish exact benign allowlist even when critical findings block
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: libxml-maintenance-blocked-review
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/libxml-maintenance-public/report.json
+            ${{ runner.temp }}/libxml-maintenance-public/source-provenance.json
+            ${{ runner.temp }}/libxml-maintenance-public/source-pins.json
+            ${{ runner.temp }}/libxml-maintenance-public/runtime.sha256
+            ${{ runner.temp }}/libxml-maintenance-public/library-sha256.txt
+            ${{ runner.temp }}/libxml-maintenance-public/runner-ca.sha256
+            ${{ runner.temp }}/libxml-maintenance-public/scan.json
+            ${{ runner.temp }}/libxml-maintenance-public/scanner.json
+            ${{ runner.temp }}/libxml-maintenance-public/scanner-binary.sha256
+            ${{ runner.temp }}/libxml-maintenance-public/scanner-archive.sha256

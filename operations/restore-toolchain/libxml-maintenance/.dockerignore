@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!Dockerfile.combined
+!runner-ca.crt
+!build.sh
+!layout.c
+!xml-normal.c
+!source-pins.json
+!verified-sources/
+!verified-sources/*
