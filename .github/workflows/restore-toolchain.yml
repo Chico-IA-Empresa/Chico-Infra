@@ -36,6 +36,7 @@ jobs:
       - name: Build immutable-source amd64 toolchain without AWS credentials
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
           install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
           sha256sum operations/restore-toolchain/runner-ca.crt > "$RUNNER_TEMP/restore-toolchain-runner-ca.sha256"
           docker build --platform=linux/amd64 --pull --tag chico-restore-toolchain:synthetic operations/restore-toolchain
@@ -46,6 +47,18 @@ jobs:
           sudo "$(command -v python)" tests/restore-toolchain-integration.py \
             --image "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
             --evidence "$RUNNER_TEMP/restore-toolchain-evidence"
+      - name: Export only synthetic allowlist to runner-owned directory
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
+          for name in summary.json failure-summary.json provenance.txt verify-0.txt verify-1.txt verify-corrupt.txt; do
+            source="$RUNNER_TEMP/restore-toolchain-evidence/$name"
+            if sudo test -f "$source"; then
+              sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" "$source" "$RUNNER_TEMP/restore-toolchain-public/$name"
+            fi
+          done
       - name: Install pinned official scanner binary without a third-party Action
         shell: bash
         run: |
@@ -58,14 +71,14 @@ jobs:
           tar -xzf "$RUNNER_TEMP/trivy-linux-amd64.tar.gz" -C "$RUNNER_TEMP/trivy-bin" trivy
           chmod 0755 "$RUNNER_TEMP/trivy-bin/trivy"
           printf '%s\n' "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
-          sha256sum "$RUNNER_TEMP/trivy-bin/trivy" > "$RUNNER_TEMP/restore-toolchain-evidence/scanner-binary.sha256"
+          sha256sum "$RUNNER_TEMP/trivy-bin/trivy" > "$RUNNER_TEMP/restore-toolchain-public/scanner-binary.sha256"
       - name: Known vulnerability inventory; critical findings block
         run: |
           set -euo pipefail
-          trivy version --format json > "$RUNNER_TEMP/restore-toolchain-evidence/scanner.json"
+          trivy version --format json > "$RUNNER_TEMP/restore-toolchain-public/scanner.json"
           trivy image --scanners vuln --format json \
-            --output "$RUNNER_TEMP/restore-toolchain-evidence/scan.json" chico-restore-toolchain:synthetic
-          python - "$RUNNER_TEMP/restore-toolchain-evidence/scan.json" <<'PY'
+            --output "$RUNNER_TEMP/restore-toolchain-public/scan.json" chico-restore-toolchain:synthetic
+          python - "$RUNNER_TEMP/restore-toolchain-public/scan.json" <<'PY'
           import json, sys
           report = json.load(open(sys.argv[1]))
           assert report.get('SchemaVersion') == 2 and report.get('Results'), 'Unknown scan report'
@@ -83,12 +96,13 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
           path: |
-            ${{ runner.temp }}/restore-toolchain-evidence/summary.json
-            ${{ runner.temp }}/restore-toolchain-evidence/provenance.txt
-            ${{ runner.temp }}/restore-toolchain-evidence/scan.json
-            ${{ runner.temp }}/restore-toolchain-evidence/scanner.json
-            ${{ runner.temp }}/restore-toolchain-evidence/scanner-binary.sha256
-            ${{ runner.temp }}/restore-toolchain-evidence/verify-0.txt
-            ${{ runner.temp }}/restore-toolchain-evidence/verify-1.txt
-            ${{ runner.temp }}/restore-toolchain-evidence/verify-corrupt.txt
+            ${{ runner.temp }}/restore-toolchain-public/summary.json
+            ${{ runner.temp }}/restore-toolchain-public/failure-summary.json
+            ${{ runner.temp }}/restore-toolchain-public/provenance.txt
+            ${{ runner.temp }}/restore-toolchain-public/scan.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner-binary.sha256
+            ${{ runner.temp }}/restore-toolchain-public/verify-0.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-1.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-corrupt.txt
             ${{ runner.temp }}/restore-toolchain-runner-ca.sha256

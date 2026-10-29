@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Linux/Docker synthetic-only integration. No credentials, AWS, or production mounts.
 
-Build first; pass the local immutable image id. Errors never echo process output.
+Build first; pass the local immutable image id. Errors expose only a sanitized
+stage summary from this newly generated fixture, never raw private diagnostics.
 Evidence consists solely of this newly created encrypted synthetic fixture.
 """
 import argparse
@@ -18,6 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "operations/restore-toolchain"
+CURRENT_STAGE = "argument-validation"
+SYNTHETIC_EVIDENCE = None
+FAILURE_CONTEXT = {}
 
 
 def load(name):
@@ -32,14 +36,43 @@ report = load("verify_report")
 
 
 def execute(command, output=None, must_succeed=True):
+    global FAILURE_CONTEXT
     result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             check=False, timeout=300)
     if output:
         output.write_bytes(result.stdout)
         output.with_suffix(output.suffix + ".stderr").write_bytes(result.stderr)
     if must_succeed and result.returncode:
+        FAILURE_CONTEXT = {"processExitCode": result.returncode,
+                           "syntheticDiagnostics": sanitized_diagnostics(result.stdout, result.stderr)}
         raise RuntimeError("Synthetic toolchain command failed; inspect synthetic runner evidence")
     return result
+
+
+def sanitized_diagnostics(stdout, stderr):
+    """Only our fresh synthetic harness is allowed here; never a real restore logger."""
+    secret = None
+    parts = [stdout.decode(errors="replace"), stderr.decode(errors="replace")]
+    if SYNTHETIC_EVIDENCE is not None:
+        fixture = SYNTHETIC_EVIDENCE / "fixture"
+        cipher = fixture / "cipher-fixture-only"
+        if cipher.is_file() and not cipher.is_symlink():
+            secret = cipher.read_text()
+        for name in ["initdb.log", "start.log", "postgres.log", "sql.log", "stanza.log", "full.log", "diff.log"]:
+            log = fixture / name
+            if log.is_file() and not log.is_symlink():
+                parts.append(name + ":\n" + log.read_text(errors="replace"))
+    text = "\n".join(parts)
+    if secret:
+        text = text.replace(secret, "<REDACTED>")
+    selected = []
+    for line in text.splitlines():
+        if re.search(r"ERROR|FATAL|PANIC|CHICO_SYNTHETIC_STAGE|Permission denied|permission denied|not found|Read-only file system|No such file", line):
+            if re.search(r"cipher|passphrase|password|secret", line, re.I):
+                selected.append("<synthetic configuration diagnostic redacted>")
+            else:
+                selected.append(line[:500])
+    return selected[-16:]
 
 
 def private_directory(path, uid):
@@ -48,6 +81,7 @@ def private_directory(path, uid):
 
 
 def main():
+    global SYNTHETIC_EVIDENCE, CURRENT_STAGE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
     parser.add_argument("--evidence", required=True, type=Path)
@@ -60,9 +94,13 @@ def main():
         raise ValueError("Fresh canonical evidence directory required")
     uid = 999  # Pinned Debian postgres image contract, verified below before creating PGDATA.
     private_directory(evidence, uid)
+    SYNTHETIC_EVIDENCE = evidence
     mounts = {"/scripts": SCRIPTS}
 
     def run(arguments, *, extra=None, entrypoint="/bin/bash", filename=None, check=True):
+        global CURRENT_STAGE
+        CURRENT_STAGE = filename or "image-identity"
+        print(json.dumps({"syntheticStage": CURRENT_STAGE}), flush=True)
         return execute(runner.isolated_command(args.image, uid, {**mounts, **(extra or {})}, entrypoint, arguments),
                        evidence / filename if filename else None, check)
 
@@ -234,4 +272,12 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        raise SystemExit(f"Toolchain integration failed: {type(error).__name__}; inspect synthetic evidence") from None
+        failure = {"syntheticOnly": True, "failedStage": CURRENT_STAGE, "errorType": type(error).__name__,
+                   "realDatabaseRestored": False, **FAILURE_CONTEXT}
+        # Our parser raises fixed messages without including input/diagnostic lines.
+        if isinstance(error, ValueError) and not isinstance(error, json.JSONDecodeError):
+            failure["validationReason"] = str(error)
+        if SYNTHETIC_EVIDENCE is not None:
+            (SYNTHETIC_EVIDENCE / "failure-summary.json").write_text(json.dumps(failure, indent=2) + "\n")
+        print(json.dumps(failure), flush=True)
+        raise SystemExit("Toolchain synthetic integration failed; see sanitized stage summary") from None

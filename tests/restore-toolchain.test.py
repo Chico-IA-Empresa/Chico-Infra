@@ -120,5 +120,28 @@ class IsolationTests(unittest.TestCase):
                     runner.isolated_command(image, uid, mounts, "/bin/bash", [])
 
 
+class SyntheticDiagnosticsTests(unittest.TestCase):
+    def test_known_fixture_cipher_is_removed_from_errors_and_log_files(self):
+        spec = importlib.util.spec_from_file_location("restore_integration", ROOT / "tests/restore-toolchain-integration.py")
+        integration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(integration)
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            fixture = evidence / "fixture"
+            fixture.mkdir()
+            token = "unit-only-sensitive-random-token"
+            (fixture / "cipher-fixture-only").write_text(token)
+            (fixture / "full.log").write_text("ERROR: authentication failed for " + token + "\n")
+            integration.SYNTHETIC_EVIDENCE = evidence
+            diagnostic = integration.sanitized_diagnostics(
+                b"CHICO_SYNTHETIC_STAGE=full-backup\n",
+                ("ERROR: connection failed for " + token + "\nERROR: repo1-cipher-pass=" + token).encode())
+        joined = "\n".join(diagnostic)
+        self.assertNotIn(token, joined)
+        self.assertIn("<REDACTED>", joined)
+        self.assertIn("CHICO_SYNTHETIC_STAGE=full-backup", joined)
+        self.assertIn("configuration diagnostic redacted", joined)
+
+
 if __name__ == "__main__":
     unittest.main()

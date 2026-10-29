@@ -34,6 +34,8 @@ sudo python tests/restore-toolchain-integration.py --image sha256:ID_IMUTAVEL --
 
 O diretório da integração deve ser novo; contém apenas a fixture gerada. A pipeline publica allowlist de resumo sintético, relatórios verify, inventário/hashes e scan. Não publica repo, PGDATA, cipher/configuração ou dumps. A integração não aceita fixtures herdadas nem caminhos da seleção real.
 
+Em falha, o harness informa a etapa exata e um resumo sintético sanitizado: marcadores de fase, tipos/códigos de falha e linhas de erro selecionadas dos logs dessa fixture recém-criada. Remove o cipher conhecido e omite linhas que mencionem cipher/passphrase/password/secret. O teste offline verifica essa remoção. Nunca usar esse coletor sobre dados reais. A exportação `always` copia somente nomes fixos da allowlist para uma pasta separada pertencente ao runner, com arquivos 0644; repo/config/PGDATA continuam 0700 sob UID999 e stderr bruto não é publicado. Essa separação também permite que o scanner grave seu resultado sem abrir as permissões dos diretórios de dados.
+
 ## Gates que permanecem para o restore real
 
 1. Build Linux e integração com saída do binário real, scan conhecido/revisado, hashes de binário e digest resultante. Preparação/offline não fecha B1.
