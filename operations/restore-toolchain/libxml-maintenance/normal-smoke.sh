@@ -52,7 +52,9 @@ task_options=(--config=/dev/null --stanza=fixture --repo1-type=posix --repo1-pat
 task_stage=stanza-create
 pgbackrest "${task_options[@]}" --pg1-path="$task_data" --no-online stanza-create
 task_stage=offline-backup
-pgbackrest "${task_options[@]}" --pg1-path="$task_data" --no-online --no-archive-check --type=full backup
+# The pinned parser makes archive-check dependent on online=true and sets its
+# offline default to false. Do not explicitly set that unavailable option here.
+pgbackrest "${task_options[@]}" --pg1-path="$task_data" --no-online --type=full backup
 task_stage=backup-label
 mapfile -t task_labels < <(find /work/repo/backup/fixture -mindepth 1 -maxdepth 1 -type d -name '*F' -printf '%f\n')
 test "${#task_labels[@]}" = 1
