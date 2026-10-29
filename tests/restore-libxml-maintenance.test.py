@@ -23,6 +23,7 @@ source = load('source_acquisition', HERE / 'acquire.py')
 assessor = load('abi_assessor', HERE / 'assess.py')
 context = load('context_composer', HERE / 'prepare_context.py')
 runner = load('isolated_runner', HERE.parent / 'isolated_run.py')
+integration = load('normal_integration', ROOT / 'tests/restore-libxml-maintenance-integration.py')
 NOW = dt.datetime(2026, 10, 29, tzinfo=dt.timezone.utc)
 
 
@@ -194,6 +195,25 @@ class ABIAndBuildTests(unittest.TestCase):
             self.assertIn(flag, command)
         self.assertTrue(any('/var/lib/postgresql/data:rw,' in part for part in command))
         self.assertFalse(any('docker.sock' in part for part in command))
+
+
+class FailureMetadataTests(unittest.TestCase):
+    def test_failure_summary_never_exports_input_text(self):
+        raw = b'PRIVATE_SENTINEL user@example.invalid SQL VALUES SECRET\nPermission denied\nERROR: [056]\nordinary_stage_failed=source-start\n'
+        report = integration.failure_summary(raw, 1)
+        self.assertEqual(report['stage'], 'source-start')
+        self.assertEqual(report['errorClasses'], ['permission-denied'])
+        self.assertEqual(report['pgBackRestErrorCodes'], ['056'])
+        self.assertNotIn('PRIVATE_SENTINEL', json.dumps(report))
+        self.assertNotIn('example.invalid', json.dumps(report))
+        self.assertFalse(report['ordinarySmokePassed'])
+
+    def test_unknown_stage_and_large_logs_stay_bounded(self):
+        report = integration.failure_summary(b'ordinary_stage_failed=private-secret', 2)
+        self.assertEqual(report['stage'], 'container-setup-or-unreported-stage')
+        self.assertNotIn('private-secret', json.dumps(report))
+        report = integration.failure_summary(b'x' * 1048577, 1)
+        self.assertEqual(report['stage'], 'unavailable-or-oversize')
 
 
 if __name__ == '__main__':
