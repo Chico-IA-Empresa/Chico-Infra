@@ -93,7 +93,14 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          trap 'rm -f envs/dev/{backend.hcl,ci.auto.tfvars.json,review.tfplan,review-manifest.json} "$RUNNER_TEMP"/{plan.log,apply.log,init.log}' EXIT
+          private_cleanup() {
+            task_status=$?
+            # Existing plan-only PutObject grant; no public artifact or raw log output.
+            node scripts/dev-plan-diagnostics.mjs "$task_status" || true
+            rm -f envs/dev/{backend.hcl,ci.auto.tfvars.json,review.tfplan,review-manifest.json} "$RUNNER_TEMP"/{plan.log,apply.log,init.log} || true
+            exit "$task_status"
+          }
+          trap private_cleanup EXIT
           # Existing reviewed bucket only. No bucket creation or public artifacts.
           aws s3api get-public-access-block --bucket "$REVIEW_BUCKET" --expected-bucket-owner "$ACCOUNT" > "$RUNNER_TEMP/pab.json"
           jq -e '.PublicAccessBlockConfiguration | .BlockPublicAcls and .IgnorePublicAcls and .BlockPublicPolicy and .RestrictPublicBuckets' "$RUNNER_TEMP/pab.json" >/dev/null
