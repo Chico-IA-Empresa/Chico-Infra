@@ -29,5 +29,8 @@ RUN sha256sum /lib/x86_64-linux-gnu/libc.so.6 /usr/lib/postgresql/16/bin/postgre
     && cmp /tmp/runtime.sha256 /opt/chico-libxml-candidate/evidence/runtime.sha256 \
     && rm /tmp/runtime.sha256
 USER postgres
+RUN test -r /opt/chico-libxml-candidate/evidence/source-provenance.json \
+    && test -r /opt/chico-libxml-candidate/evidence/runtime.sha256 \
+    && test -x /opt/chico-libxml-candidate/xml-normal-probe
 ENTRYPOINT ["/usr/local/bin/pgbackrest"]
 CMD ["version"]

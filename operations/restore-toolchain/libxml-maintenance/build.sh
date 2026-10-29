@@ -13,7 +13,9 @@ mkdir /source
 dpkg-source --no-check -x libxml2_2.9.14+dfsg-1.3ubuntu3.10.dsc /source/libxml2
 task_out=/opt/chico-libxml-candidate
 mkdir -p "$task_out/evidence"
-cp /sources/provenance.json "$task_out/evidence/source-provenance.json"
+# Authenticated public repository metadata is readable by the nonroot collector.
+# Sources stay private to the compiler; no broad chmod of logs or source trees.
+install -m 0644 /sources/provenance.json "$task_out/evidence/source-provenance.json"
 cp /candidate-input/source-pins.json "$task_out/evidence/"
 cp /baseline/runtime.sha256 "$task_out/evidence/"
 cp /baseline/package-version "$task_out/evidence/baseline-package-version"
