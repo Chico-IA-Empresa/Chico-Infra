@@ -70,7 +70,9 @@ resource "aws_instance" "this" {
   iam_instance_profile        = var.instance_profile_name
   associate_public_ip_address = false
   user_data                   = coalesce(var.bootstrap_user_data, local.bootstrap)
-  user_data_replace_on_change = true
+  # A reviewed user-data repair stops/starts this same instance. Preserve the
+  # retained root volume; an explicit SSM replay verifies the repaired script.
+  user_data_replace_on_change = false
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"

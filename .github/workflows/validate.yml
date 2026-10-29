@@ -24,6 +24,7 @@ jobs:
           node-version: '24'
       - run: terraform fmt -check -recursive
       - run: node --test tests/*.test.mjs
+      - run: node tests/dev-state-repair-integration.mjs
       - run: bash tests/bootstrap.test.sh
       - name: Reuse verified provider packages within this runner
         shell: bash

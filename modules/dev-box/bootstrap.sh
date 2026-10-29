@@ -10,7 +10,8 @@ test "$ID" = amzn && test "$VERSION_ID" = 2023
 [[ "$COMPOSE_SHA256" =~ ^[a-f0-9]{64}$ ]]
 
 # EIP is associated after RunInstances. Bound the wait; cloud-init failure is visible.
-retry dnf install -y docker curl jq python3 awscli2 amazon-ssm-agent
+retry dnf install -y docker curl-minimal jq python3 awscli-2 amazon-ssm-agent
+[[ "$(aws --version 2>&1)" == aws-cli/2.* ]]
 systemctl enable --now amazon-ssm-agent docker
 install -d -m 0755 /usr/local/lib/docker/cli-plugins
 task_download=$(mktemp)

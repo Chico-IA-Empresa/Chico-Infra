@@ -6,6 +6,7 @@ export const inventory = {
   account: '123456789012', stateBucket: 'chico-tfstate-unit-test', reviewBucket: 'chico-infra-review-unit-test',
   backupBucket: 'chico-dev-unit-backup', accessLogBucket: 'chico-dev-access-unit-test', amiId: 'ami-0123456789abcdef0',
   kmsKeyArns: ['arn:aws:kms:sa-east-1:123456789012:key/00000000-0000-0000-0000-000000000001'],
+  secretsKeyArn: 'arn:aws:kms:sa-east-1:123456789012:key/00000000-0000-0000-0000-000000000001',
   vpcId: 'vpc-0123456789abcdef0', defaultSecurityGroupId: 'sg-0123456789abcdef0',
 };
 test('plan reads only Dev state and can write only its lock and review bundle', () => {
@@ -35,6 +36,7 @@ test('rejects missing ownership, foreign keys, wildcard inputs and legacy bucket
     { vpcId: undefined }, { defaultSecurityGroupId: undefined }, { account: '*' }, { amiId: 'ami-*' },
     { stateBucket: 'chico-backup' }, { reviewBucket: 'chico-backup' }, { backupBucket: 'chico-backup' }, { accessLogBucket: 'chico-backup' }, { accessLogBucket: undefined },
     { kmsKeyArns: [] }, { kmsKeyArns: ['arn:aws:kms:sa-east-1:999999999999:key/00000000-0000-0000-0000-000000000001'] },
+    { secretsKeyArn: undefined }, { secretsKeyArn: 'arn:aws:kms:sa-east-1:123456789012:key/00000000-0000-0000-0000-000000000002' },
   ]) assert.throws(() => devInfraPolicies({ ...inventory, ...change }));
 });
 test('runtime backs up only Dev database/fixtures and never reads the legacy source or log objects', () => {
@@ -56,4 +58,59 @@ test('four distinct foundation keys fit managed-policy quotas', () => {
   const kmsKeyArns = Array.from({length:4}, (_, n) => `arn:aws:kms:sa-east-1:123456789012:key/00000000-0000-0000-0000-${String(n + 1).padStart(12,'0')}`);
   const policies = devInfraPolicies({...inventory, kmsKeyArns});
   for (const policy of [policies.plan, policies.runtimeBoundary, policies.flowBoundary, ...policies.applyParts]) assert.ok(JSON.stringify(policy).length <= 6144);
+});
+
+test('HeadBucket metadata access is bounded to the two owned buckets without granting object reads', () => {
+  const policies = devInfraPolicies(inventory);
+  for (const policy of [policies.plan, policies.apply]) {
+    const head = policy.Statement.find(s => s.Sid === 'DevBucketExistenceMetadata');
+    assert.deepEqual(head.Action, ['s3:ListBucket']);
+    assert.deepEqual(head.Resource, ['arn:aws:s3:::chico-dev-unit-backup', 'arn:aws:s3:::chico-dev-access-unit-test']);
+    assert.deepEqual(head.Condition, { StringEquals: { 'aws:RequestedRegion': 'sa-east-1' } });
+  }
+  const tag = policies.apply.Statement.find(s => s.Sid === 'TagDevBucketsAtCreation');
+  assert.deepEqual(tag.Action, ['s3:TagResource']);
+  assert.deepEqual(tag.Resource, policies.apply.Statement.find(s => s.Sid === 'DevBucketExistenceMetadata').Resource);
+  assert.equal(tag.Condition.StringEquals['aws:RequestTag/env'], 'dev');
+  assert.equal(tag.Condition.StringEquals['aws:RequestTag/project'], 'chicoai');
+});
+
+test('CI KMS grant permits validation only, not actual secret versions, other keys or direct KMS', () => {
+  const policies = devInfraPolicies(inventory);
+  const validation = policies.apply.Statement.find(s => s.Sid === 'ValidateDevSecretKeyMetadata');
+  assert.deepEqual(validation.Action, ['kms:GenerateDataKey', 'kms:Decrypt']);
+  assert.equal(validation.Resource, inventory.secretsKeyArn);
+  assert.deepEqual(validation.Condition.StringEquals, {
+    'aws:RequestedRegion': 'sa-east-1', 'kms:CallerAccount': inventory.account,
+    'kms:ViaService': 'secretsmanager.sa-east-1.amazonaws.com',
+    'kms:EncryptionContext:SecretVersionId': 'RequestToValidateKeyAccess',
+  });
+  assert.deepEqual(validation.Condition.StringLike['kms:EncryptionContext:SecretARN'], [
+    'arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/dev/api/SYNTHETIC_TOKEN-??????',
+    'arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/dev/api/DEV_DATABASE_CREDENTIALS-??????',
+  ]);
+  const planActions = policies.plan.Statement.flatMap(s => s.Action);
+  assert.ok(!planActions.includes('kms:GenerateDataKey'));
+  assert.ok(!planActions.includes('kms:Decrypt'));
+  assert.ok(!policies.apply.Statement.flatMap(s => s.Action).includes('secretsmanager:GetSecretValue'));
+});
+
+test('provider post-create reads are metadata only and keep document/value scope bounded', () => {
+  for (const policy of [devInfraPolicies(inventory).plan, devInfraPolicies(inventory).apply]) {
+    assert.ok(policy.Statement.find(s => s.Sid === 'Ec2Metadata').Action.includes('ec2:DescribeAddressesAttribute'));
+    const parameters = policy.Statement.find(s => s.Sid === 'ParameterMetadataDiscovery');
+    assert.deepEqual(parameters.Action, ['ssm:DescribeParameters']);
+    assert.equal(parameters.Resource, '*');
+    assert.deepEqual(parameters.Condition, { StringEquals: { 'aws:RequestedRegion': 'sa-east-1' } });
+    const documents = policy.Statement.find(s => s.Sid === 'DevDocuments');
+    assert.ok(documents.Action.includes('ssm:DescribeDocumentPermission'));
+    assert.equal(documents.Resource, 'arn:aws:ssm:sa-east-1:123456789012:document/chico-dev-*');
+    assert.equal(policy.Statement.find(s => s.Sid === 'NonSecretParameters').Resource, 'arn:aws:ssm:sa-east-1:123456789012:parameter/chico/dev/*');
+    assert.ok(!policy.Statement.flatMap(s => s.Action).includes('ssm:GetParametersByPath'));
+  }
+  const power = devInfraPolicies(inventory).apply.Statement.find(s => s.Sid === 'MaintainDevHostPower');
+  assert.deepEqual(power.Action, ['ec2:StopInstances', 'ec2:StartInstances']);
+  assert.equal(power.Resource, 'arn:aws:ec2:sa-east-1:123456789012:instance/*');
+  assert.equal(power.Condition.StringEquals['aws:ResourceTag/project'], 'chicoai');
+  assert.equal(power.Condition.StringEquals['aws:ResourceTag/env'], 'dev');
 });
