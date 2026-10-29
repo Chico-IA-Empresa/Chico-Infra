@@ -307,13 +307,13 @@
     "check": "CKV_AWS_126",
     "resource": "module.dev_box[0].aws_instance.this",
     "reason": "Dev usa métricas EC2 padrão de cinco minutos; detailed monitoring pago não integra o baseline.",
-    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos. Revisão fase 1: CPU Standard evita excedentes; volume parametrizado 30–80 GiB mantém criptografia/retenção/IMDSv2 e coleta padrão de métricas.",
-    "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md",
+    "compensatingControl": "CPU/status mais coletores reais de memória, disco e idade do backup; timers e alarmes definidos. Revisão fase 1: CPU Standard evita excedentes; volume parametrizado 30–80 GiB mantém criptografia/retenção/IMDSv2 e coleta padrão de métricas. Atualização revisada de userData usa parada/inicialização da mesma instância, preservando o root retido; não autoriza substituição do host.",
+    "reference": "docs/contracts/dev-infra-prd.md R01/R05/R06/R07/R08/R09/R10; docs/security-exceptions-review.md; docs/dev-ci-provisioning-recovery.md",
     "reviewedBy": "Codex technical review",
-    "reviewedAt": "2026-10-27",
+    "reviewedAt": "2026-10-28",
     "expiresAt": "2027-01-25",
     "sourceFile": "modules/dev-box/main.tf",
-    "sourceSha256": "f27b7a649e5c898c79e32c66314da36724ec3b52d5dca9b784debdb078a34816"
+    "sourceSha256": "041f1760617791b28d2ccef190cfe34acde8449ade7f5d1c9e02b17234bf992c"
   },
   {
     "scope": "dev",
