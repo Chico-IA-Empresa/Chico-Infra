@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { devInfraPolicies } from '../scripts/dev-infra-permissions.mjs';
 
 export const inventory = {
@@ -162,4 +163,30 @@ test('VPC refresh can discover its default NACL with regional metadata only', ()
       assert.ok(!actions.includes(action), action);
     }
   }
+});
+
+test('runtime permits SSM log-group discovery only in Sao Paulo without group administration', () => {
+  const { runtimeBoundary } = devInfraPolicies(inventory);
+  const grants = runtimeBoundary.Statement.filter(s => s.Action.includes('logs:DescribeLogGroups'));
+  assert.deepEqual(grants, [{
+    Sid: 'LogGroupDiscovery', Effect: 'Allow', Action: ['logs:DescribeLogGroups'], Resource: '*',
+    Condition: { StringEquals: { 'aws:RequestedRegion': 'sa-east-1' } },
+  }]);
+  // Offline scope check, not an AWS IAM simulator or proof of agent delivery.
+  for (const [region, expected] of [['sa-east-1', true], ['us-east-1', false], ['', false], [undefined, false]]) {
+    assert.equal(grants.some(s => s.Condition.StringEquals['aws:RequestedRegion'] === region), expected);
+  }
+  const actions = runtimeBoundary.Statement.flatMap(s => s.Action);
+  for (const action of ['logs:CreateLogGroup', 'logs:DeleteLogGroup', 'logs:PutRetentionPolicy', 'logs:AssociateKmsKey', 'logs:GetLogEvents', 'logs:FilterLogEvents']) {
+    assert.ok(!actions.includes(action), action);
+  }
+});
+
+test('SSM discovery is the only delta in the complete existing generated policy set', () => {
+  const policies = devInfraPolicies(inventory);
+  policies.runtimeBoundary.Statement = policies.runtimeBoundary.Statement.filter(s => s.Sid !== 'LogGroupDiscovery');
+  // Exact e42f266 baseline for this synthetic inventory: guards all writes,
+  // existing grants, flow boundary, resources and conditions against expansion.
+  assert.equal(createHash('sha256').update(JSON.stringify(policies)).digest('hex'),
+    '7e84154ec4db569eab90d5262b73d1d351d06a8e8903722a5e712035c6319d80');
 });

@@ -22,6 +22,26 @@ run "disabled_by_default" {
 }
 run "host_integration" {
   command = plan
+  override_resource {
+    target          = aws_cloudwatch_log_group.dev["bootstrap"]
+    override_during = plan
+    values          = { arn = "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/dev/bootstrap" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.dev["ssm"]
+    override_during = plan
+    values          = { arn = "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/dev/ssm" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.dev["proxy"]
+    override_during = plan
+    values          = { arn = "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/dev/proxy" }
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.dev["backup"]
+    override_during = plan
+    values          = { arn = "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/dev/backup" }
+  }
   variables {
     provision_enabled              = true
     permissions_boundary_arns      = { runtime = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-runtime-boundary", flow = "arn:aws:iam::123456789012:policy/chico/shared/chico-dev-flow-boundary" }
@@ -64,6 +84,22 @@ run "host_integration" {
   assert {
     condition     = length(aws_route53_record.dev) == 0 && length(aws_cloudwatch_log_group.dev) == 4 && length(aws_cloudwatch_metric_alarm.runtime) == 3
     error_message = "DNS requer autorização separada; memória/disco/backup devem ter sinais explícitos."
+  }
+  assert {
+    condition = jsondecode(aws_iam_role_policy.telemetry[0].policy) == jsondecode(jsonencode({ Version = "2012-10-17", Statement = [
+      { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"], Resource = [for name in ["backup", "bootstrap", "proxy", "ssm"] : "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/dev/${name}:*"] },
+      { Sid = "LogGroupDiscovery", Effect = "Allow", Action = ["logs:DescribeLogGroups"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = "sa-east-1" } } },
+      { Effect = "Allow", Action = ["cloudwatch:PutMetricData"], Resource = "*", Condition = { StringEquals = { "cloudwatch:namespace" = "Chico/Dev" } } }
+    ] }))
+    error_message = "Telemetry adds only regional discovery; existing exact log destinations/metrics remain unchanged, without log-group administration or event reads."
+  }
+  assert {
+    condition = alltrue([for request in [
+      { region = "sa-east-1", expected = true }, { region = "us-east-1", expected = false }, { region = "", expected = false }, { region = null, expected = false }
+      ] : anytrue([for statement in jsondecode(aws_iam_role_policy.telemetry[0].policy).Statement :
+        contains(statement.Action, "logs:DescribeLogGroups") && try(statement.Condition.StringEquals["aws:RequestedRegion"], null) == request.region
+    ]) == request.expected])
+    error_message = "Offline telemetry discovery scope must allow Sao Paulo and reject a foreign, empty or missing region; this is not an AWS IAM simulation."
   }
 }
 run "reject_foreign_log_sink" {

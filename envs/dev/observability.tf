@@ -33,6 +33,7 @@ resource "aws_iam_role_policy" "telemetry" {
   role  = aws_iam_role.runtime[0].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"], Resource = [for g in aws_cloudwatch_log_group.dev : "${g.arn}:*"] },
+    { Sid = "LogGroupDiscovery", Effect = "Allow", Action = ["logs:DescribeLogGroups"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = "sa-east-1" } } },
     { Effect = "Allow", Action = ["cloudwatch:PutMetricData"], Resource = "*", Condition = { StringEquals = { "cloudwatch:namespace" = "Chico/Dev" } } }
   ] })
 }
