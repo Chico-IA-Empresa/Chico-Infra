@@ -46,6 +46,8 @@ jobs:
             terraform -chdir="modules/$module" validate
             terraform -chdir="modules/$module" test
           done
+      - name: Native offline EC2 lifecycle regression with synthetic local state
+        run: node tests/dev-box-lifecycle-integration.mjs
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:
           tflint_version: v0.59.1
