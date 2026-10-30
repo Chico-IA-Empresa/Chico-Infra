@@ -1,0 +1,119 @@
+name: Dev protected synthetic ECR and status proof
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [build, status]
+        required: true
+      review_sha256:
+        description: SHA256 of the exact private proof release JSON
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+env:
+  OPERATION: ${{ inputs.operation }}
+  REVIEW_SHA256: ${{ inputs.review_sha256 }}
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Check current main and protected environments before OIDC
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+      - name: Validate private proof release without AWS credentials
+        env:
+          DEV_PROOF_REVIEW_JSON: ${{ secrets.DEV_PROOF_REVIEW_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          PROOF_ROLE_ARN: ${{ inputs.operation == 'build' && vars.BUILD_ROLE_ARN || vars.STATUS_ROLE_ARN }}
+        run: node scripts/dev-proof-gates.mjs
+  execute:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: infra-apply-dev
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Recheck governance after manual environment approval
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+      - name: Recheck source binding and funding before requesting OIDC
+        id: release
+        env:
+          DEV_PROOF_REVIEW_JSON: ${{ secrets.DEV_PROOF_REVIEW_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          PROOF_ROLE_ARN: ${{ inputs.operation == 'build' && vars.BUILD_ROLE_ARN || vars.STATUS_ROLE_ARN }}
+        run: node scripts/dev-proof-gates.mjs
+      - name: Verify reviewed public base on native ARM64 before AWS credentials
+        if: inputs.operation == 'build'
+        env:
+          FIXTURE_BASE: ${{ steps.release.outputs.fixture_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(uname -m)" = aarch64
+          docker buildx version >/dev/null
+          docker pull --platform linux/arm64 "$FIXTURE_BASE" > "$RUNNER_TEMP/base-pull-private.log" 2>&1
+          docker image inspect "$FIXTURE_BASE" > "$RUNNER_TEMP/base-inspect-private.json"
+          jq -e 'length == 1 and .[0].Architecture == "arm64" and .[0].Os == "linux" and ((.[0].Config.OnBuild // []) | length == 0)' "$RUNNER_TEMP/base-inspect-private.json" >/dev/null
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint /bin/sh "$FIXTURE_BASE" -c 'test "$(uname -m)" = aarch64'
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ steps.release.outputs.role_arn }}
+          role-session-name: dev-proof-${{ github.run_id }}
+          aws-region: sa-east-1
+          allowed-account-ids: '306915830875'
+          unset-current-credentials: true
+      - name: Build only the synthetic fixture, push and require known scan
+        if: inputs.operation == 'build'
+        env:
+          CHICO_SYNTHETIC_ONLY: 'true'
+          AWS_ACCOUNT_ID: '306915830875'
+          FIXTURE_BASE: ${{ steps.release.outputs.fixture_base }}
+          FIXTURE_TAG: fixture-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          task_role=$(aws sts get-caller-identity --query Arn --output text --region sa-east-1)
+          [[ "$task_role" == arn:aws:sts::306915830875:assumed-role/ci-build-dev/* ]]
+          bash fixtures/dev/ecr-proof.sh
+      - name: Read fixed local fixture status only
+        if: inputs.operation == 'status'
+        run: node scripts/dev-proof-status.mjs
+      - name: Remove runner-only diagnostics
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/base-pull-private.log" "$RUNNER_TEMP/base-inspect-private.json"
