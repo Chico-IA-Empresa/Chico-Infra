@@ -110,6 +110,7 @@ export function devInfraPolicies(i) {
     allow('RegistryToken', ['ecr:GetAuthorizationToken'], '*', region),
     allow('PullSharedImages', ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'], repos, region),
     allow('DevLogs', ['logs:CreateLogStream', 'logs:DescribeLogStreams', 'logs:PutLogEvents'], `${logs}:*`, region),
+    allow('LogGroupDiscovery', ['logs:DescribeLogGroups'], '*', region),
     allow('DevMetrics', ['cloudwatch:PutMetricData'], '*', { StringEquals: { ...region.StringEquals, 'cloudwatch:namespace': 'Chico/Dev' } }),
     allow('DevBackupListing', ['s3:ListBucket'], `arn:aws:s3:::${backup}`, { StringLike: { 's3:prefix': ['dev/fixtures/*', 'dev/database/*'] } }),
     allow('DevBackupObjects', ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'], ['fixtures', 'database'].map(prefix => `arn:aws:s3:::${backup}/dev/${prefix}/*`)),
