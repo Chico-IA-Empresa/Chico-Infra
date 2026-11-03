@@ -73,8 +73,11 @@ for task_name in postgres caddy; do
       task_all_scans_passed=false
       continue
     fi
+    stage_event "$task_name" file-capabilities
+    docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint getcap "$task_image" /usr/bin/caddy > "$task_evidence/caddy-file-capabilities.txt"
+    test ! -s "$task_evidence/caddy-file-capabilities.txt"
     stage_event "$task_name" caddy-version
-    docker run --rm --network none --read-only --cap-drop ALL --entrypoint caddy "$task_image" version > "$task_evidence/caddy-version.txt"
+    docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint caddy "$task_image" version > "$task_evidence/caddy-version.txt"
   fi
 done
 stage_event setup completion-check
