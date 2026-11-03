@@ -1,0 +1,96 @@
+name: Dev protected read-only IAM negatives
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        type: choice
+        options: [build, status]
+        required: true
+      review_sha256:
+        description: SHA256 of the exact private IAM read-negative review JSON
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+env:
+  NEGATIVE_ROLE: ${{ inputs.role }}
+  REVIEW_SHA256: ${{ inputs.review_sha256 }}
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Verify current main and governance before OIDC
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+      - name: Verify exact source role inventory and funding
+        env:
+          DEV_IAM_NEGATIVES_REVIEW_JSON: ${{ secrets.DEV_IAM_NEGATIVES_REVIEW_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          BUILD_ROLE_ARN: ${{ vars.BUILD_ROLE_ARN }}
+          STATUS_ROLE_ARN: ${{ vars.STATUS_ROLE_ARN }}
+        run: node scripts/dev-iam-negatives.mjs gate
+  execute:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: infra-apply-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Recheck current main and governance after manual approval
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+      - name: Recheck exact review and funding before OIDC
+        id: release
+        env:
+          DEV_IAM_NEGATIVES_REVIEW_JSON: ${{ secrets.DEV_IAM_NEGATIVES_REVIEW_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          BUILD_ROLE_ARN: ${{ vars.BUILD_ROLE_ARN }}
+          STATUS_ROLE_ARN: ${{ vars.STATUS_ROLE_ARN }}
+        run: node scripts/dev-iam-negatives.mjs gate
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ steps.release.outputs.role_arn }}
+          role-session-name: dev-iam-read-${{ github.run_id }}
+          aws-region: sa-east-1
+          allowed-account-ids: '306915830875'
+          unset-current-credentials: true
+      - name: Run fixed metadata-only negatives under exact live role
+        env:
+          DEV_IAM_NEGATIVES_REVIEW_JSON: ${{ secrets.DEV_IAM_NEGATIVES_REVIEW_JSON }}
+          FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+          DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+          PROOF_ROLE_ARN: ${{ steps.release.outputs.role_arn }}
+        run: node scripts/dev-iam-negatives.mjs probe
