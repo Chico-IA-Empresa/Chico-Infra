@@ -56,6 +56,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python tests/config-consumer.test.py
+      - name: Fixture Compose interpolation from the clean SSM working context
+        run: python tests/dev-fixture-compose-config.test.py
       - run: python tests/proxy-events.test.py
       - run: python tests/dev-database-backup.test.py
       - run: python tests/runtime-iam-read-negatives.test.py

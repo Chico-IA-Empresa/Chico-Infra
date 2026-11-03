@@ -26,6 +26,14 @@ O build/push/scan não comprova pull/run sob runtime, negativas IAM reais ou ace
 
 ## Status fixo
 
+O documento SSM fixo executa Compose com o arquivo absoluto, sem herdar as variáveis da sessão do instalador nem `--env-file`. Antes de declarar a fixture instalada, preparar `/opt/chico-dev-fixture/.env` com `fixtures/dev/create-compose-config.py`, fornecendo somente os três digests efetivamente revisados. O helper fixa `COMPOSE_PROFILES=local`, para incluir `proxy-local` e manter o profile de TLS público inativo. Ele não grava credenciais, não inicia containers e recusa sobrescrever qualquer `.env` existente.
+
+O arquivo `/etc/chico/fixture.env` da unit de backup não substitui esse arquivo de interpolação do projeto. Seus pins devem coincidir com os três pins do `.env`; bucket e demais configurações não secretas do backup continuam na unit. A senha PostgreSQL permanece em seu arquivo separado em tmpfs. Não colocá-la em nenhum dos dois arquivos de ambiente.
+
+A preparação do `.env` valida apenas a sintaxe dos pins e retorna `fixtureInstalled=false` e `imagesApproved=false`. Procedência, ARM64, scan conhecido e revisão da instalação continuam obrigatórios. Em uma retomada, conferir bytes/owner/modo do arquivo existente; não removê-lo para contornar a recusa de overwrite. A prova final deve executar o documento de status na instância sob a role própria, com os três serviços realmente em execução.
+
+O teste `tests/dev-fixture-compose-config.test.py` usa o Compose real somente em `config`, sem engine/pull/run: reproduz a falha original sem pins e confere a configuração corrigida a partir de um diretório de trabalho vazio, sem variáveis herdadas. Essa prova local não é execução ARM64 nem status operacional AWS.
+
 Somente após instalar e verificar a fixture local, preparar novo JSON com `fixture_installed=true` e os campos `instance_id`, `document_name`, `document_version`, `document_sha256` iguais ao alvo compilado em `dev-proof-gates.mjs`. O coordenador deve conferir novamente versão/hash reais antes de liberar o JSON. Nenhum comando ou parâmetro shell vem do dispatch/JSON.
 
 O helper confere STS da role status, envia documento numericamente versionado e hash SHA256, com instância exata e CloudWatch output explícito. Faz polling limitado, aceita apenas ausência inicial transitória da invocation e estados não terminais conhecidos. Só passa com Success/código0/sem stderr e os serviços `postgres`, `static`, `proxy-local` em execução, além de Docker/SSM ativos. Não publica stdout/stderr; a saída sanitizada contém CommandId e resultado. Isso não verifica saúde/dados do banco real, configuração, backup/restore ou entrega CloudWatch/SNS.
