@@ -1,0 +1,66 @@
+name: Dev fixture image maintenance review only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: infra-dev
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Test scan refusal and shell syntax without credentials
+        run: |
+          python3 tests/fixture-maintenance-scan.test.py
+          bash -n fixtures/dev/image-maintenance/review.sh
+      - name: Verify current main and governance
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+  review:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: infra-apply-dev
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Recheck current main and governance after manual approval
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+      - name: Native maintenance build and complete package scans
+        run: bash fixtures/dev/image-maintenance/review.sh
+      - name: Preserve only package and synthetic build evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fixture-image-maintenance-evidence
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/fixture-image-maintenance-evidence/
