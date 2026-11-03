@@ -10,4 +10,6 @@ Caddy upgrades only brotli-libs to1.2.1-r0 using the signed Alpine repository an
 
 Critical or unknown/incomplete inventories block. Noncritical findings remain listed for review. Benign postgres --version, gosu user drop and caddy version probes run only after known scans pass. This is ordinary package maintenance; it runs no vulnerability PoC, corpus, fuzzing or active exploit test.
 
-This candidate has not been committed, published, dispatched or executed. Main/source changes require new proof JSON/hash for later protected operations. Publishing/promoting final images, their final digests, installing fixture, secrets/runtime configuration, persistent data and real restore each retain their own reviews and gates. Original checkouts and uncommitted work remain untouched.
+The workflow records only image/stage identifiers and exit status for a failed build or probe; raw build logs remain temporary on the runner. The exact Brotli version is checked from the complete scanner package inventory rather than human-readable apk output. A partial run preserves its package evidence and cannot produce the completion summary.
+
+Main/source changes require new proof JSON/hash for later protected operations. Publishing/promoting final images, their final digests, installing fixture, secrets/runtime configuration, persistent data and real restore each retain their own reviews and gates. Original checkouts and uncommitted work remain untouched.

@@ -3,7 +3,7 @@ import json
 import sys
 
 
-def verify(report, require_gosu=False):
+def verify(report, require_gosu=False, require_brotli=False):
     if report.get('SchemaVersion') != 2 or not report.get('Results'):
         raise ValueError('Unknown scan report')
     if not report.get('Metadata', {}).get('OS', {}).get('Family'):
@@ -21,6 +21,12 @@ def verify(report, require_gosu=False):
         if len(gosu) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
                                       for p in gosu[0].get('Packages', [])):
             raise ValueError('Rebuilt gosu standard-library inventory missing')
+    if require_brotli:
+        packages = [p for r in report['Results'] if r.get('Class') == 'os-pkgs'
+                    for p in r.get('Packages', [])]
+        if not any(p.get('Name') == 'brotli-libs' and p.get('Version') == '1.2.1-r0'
+                   for p in packages):
+            raise ValueError('Pinned Brotli package inventory missing')
     counts = {}
     for v in vulnerabilities:
         severity = v.get('Severity', 'UNKNOWN')
@@ -32,7 +38,8 @@ def verify(report, require_gosu=False):
 if __name__ == '__main__':
     try:
         print(json.dumps(verify(json.load(open(sys.argv[1], encoding='utf-8')),
-                                require_gosu='--require-gosu' in sys.argv[2:])))
+                                require_gosu='--require-gosu' in sys.argv[2:],
+                                require_brotli='--require-brotli' in sys.argv[2:])))
     except (ValueError, KeyError, OSError, IndexError, TypeError):
         print('Image maintenance scan refused; inspect the package-only evidence', file=sys.stderr)
         raise SystemExit(1)
