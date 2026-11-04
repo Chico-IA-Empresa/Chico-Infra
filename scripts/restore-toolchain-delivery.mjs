@@ -6,6 +6,7 @@ import {pathToFileURL, fileURLToPath} from 'node:url';
 import {validateExecutionGates} from './execution-gates.mjs';
 
 export const target=Object.freeze({account:'306915830875',region:'sa-east-1',repository:'chico-workers',github:'Chico-IA-Empresa/Chico-Infra',role:'arn:aws:iam::306915830875:role/ci-build-dev'});
+export const workflowRef=`${target.github}/.github/workflows/restore-toolchain-delivery.yml@refs/heads/main`;
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const digest=x=>typeof x==='string'&&/^sha256:[a-f0-9]{64}$/.test(x);
 const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
@@ -22,16 +23,20 @@ export function guardedInputs(root){
  return hash(JSON.stringify(manifest.files));
 }
 export function validateReview(raw,c,{publication=false}={}){
- const now=c.now??new Date(),remaining=Date.parse(c.validUntil)-now.getTime();
- if(c.repository!==target.github||c.ref!=='refs/heads/main'||c.eventName!=='workflow_dispatch'||!/^[a-f0-9]{40}$/.test(c.commit??'')||!/^[1-9][0-9]{0,19}$/.test(c.runId??'')||c.runAttempt!=='1'||c.roleArn!==target.role)throw Error('Exact first-attempt protected main context required');
+ const now=c.now??new Date();
+ if(c.repository!==target.github||c.ref!=='refs/heads/main'||c.eventName!=='workflow_dispatch'||c.workflowRef!==workflowRef||!/^[1-9][0-9]{0,14}$/.test(c.runNumber??'')||!/^[a-f0-9]{40}$/.test(c.commit??'')||!/^[1-9][0-9]{0,19}$/.test(c.runId??'')||c.runAttempt!=='1'||c.roleArn!==target.role)throw Error('Exact first-attempt protected workflow/main context required');
  if(typeof raw!=='string'||!sha(c.reviewHash)||hash(raw)!==c.reviewHash||!sha(c.inputsHash))throw Error('Private release/source bytes differ');
  const r=JSON.parse(raw);
- if(!keys(r,['account_id','provision_enabled','credit_approval','proof'])||!keys(r.credit_approval,['account_id','all_charges_covered','shutdown_reserve_confirmed','evidence_reference','reviewed_on','expires_on'])||!keys(r.proof,['scope','operation','source_commit','repository_name','platform','inputs_sha256','reviewed_findings_sha256','reviewed_inventory_sha256','repository_inventory_sha256','package_review_reference','storage']))throw Error('Exact minimal release metadata required');
+ if(!keys(r,['account_id','provision_enabled','credit_approval','proof'])||!keys(r.credit_approval,['account_id','all_charges_covered','shutdown_reserve_confirmed','evidence_reference','reviewed_on','expires_on'])||!keys(r.proof,['scope','operation','source_commit','expected_run_number','repository_name','platform','inputs_sha256','reviewed_findings_sha256','reviewed_inventory_sha256','repository_inventory_sha256','package_review_reference','storage']))throw Error('Exact minimal release metadata required');
  validateExecutionGates(r,{account:target.account,approved:c.approved,validUntil:c.validUntil,now});
  const p=r.proof,s=p.storage;
+ // GitHub assigns a unique ordinal to each new run of this fixed workflow.
+ // Reruns retain that ordinal but have runAttempt>1, already refused above.
+ if(!Number.isSafeInteger(p.expected_run_number)||p.expected_run_number<1||p.expected_run_number!==Number(c.runNumber))throw Error('Private approval belongs to a different workflow run');
  if(p.scope!=='restore-toolchain-delivery'||p.operation!=='publish-existing-ecr'||p.source_commit!==c.commit||p.repository_name!==target.repository||p.platform!=='linux/amd64'||p.inputs_sha256!==c.inputsHash||!sha(p.reviewed_findings_sha256)||!sha(p.reviewed_inventory_sha256)||!sha(p.repository_inventory_sha256)||!reference(p.package_review_reference))throw Error('Reviewed source/package scope differs');
  if(!keys(s,['approval_reference','retention_until_utc','cleanup_review_reference','max_image_size_bytes'])||!reference(s.approval_reference)||!reference(s.cleanup_review_reference)||!utc(s.retention_until_utc)||Date.parse(s.retention_until_utc)<=now.getTime()||Date.parse(s.retention_until_utc)>Date.parse(r.credit_approval.expires_on+'T00:00:00Z')||!Number.isSafeInteger(s.max_image_size_bytes)||s.max_image_size_bytes<=0||s.max_image_size_bytes>maxImageBytes)throw Error('Concrete privately approved storage/retention bounds required');
- if(publication&&remaining<25*60*1000)throw Error('At least twenty-five minutes of actual funding release required before publication');
+ const remaining=Math.min(Date.parse(c.validUntil),Date.parse(r.credit_approval.expires_on+'T00:00:00Z'),Date.parse(s.retention_until_utc))-now.getTime();
+ if(publication&&remaining<25*60*1000)throw Error('At least twenty-five minutes before the earliest financial/retention deadline required');
  return {review:r,tag:`restore-${c.commit}-${c.runId}`,roleArn:target.role};
 }
 const stableRows=rows=>rows.map(x=>JSON.stringify(x)).sort().map(x=>JSON.parse(x));
@@ -95,7 +100,7 @@ export function verifyEcrScan(report,manifestDigest,pushedAtUTC,now=new Date()){
  return {knownScanComplete:true,counts,noncriticalReviewPending:f.findings.length>0,hostPullApproved:false,stagingPullApproved:false};
 }
 
-function context(){return {repository:process.env.GITHUB_REPOSITORY,ref:process.env.GITHUB_REF,eventName:process.env.GITHUB_EVENT_NAME,commit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,roleArn:process.env.BUILD_ROLE_ARN,reviewHash:process.env.REVIEW_SHA256,approved:process.env.DEV_EXECUTION_APPROVED,validUntil:process.env.FUNDING_REVIEW_VALID_UNTIL,inputsHash:guardedInputs(process.cwd())};}
+function context(){return {repository:process.env.GITHUB_REPOSITORY,ref:process.env.GITHUB_REF,eventName:process.env.GITHUB_EVENT_NAME,workflowRef:process.env.GITHUB_WORKFLOW_REF,runNumber:process.env.GITHUB_RUN_NUMBER,commit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,roleArn:process.env.BUILD_ROLE_ARN,reviewHash:process.env.REVIEW_SHA256,approved:process.env.DEV_EXECUTION_APPROVED,validUntil:process.env.FUNDING_REVIEW_VALID_UNTIL,inputsHash:guardedInputs(process.cwd())};}
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
  try{
   const mode=process.argv[2],read=p=>JSON.parse(fs.readFileSync(p,'utf8'));
