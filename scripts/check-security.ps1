@@ -5,11 +5,12 @@ $taskOriginalHashSeed = $env:PYTHONHASHSEED
 Push-Location $taskBase
 try {
   $env:PYTHONHASHSEED = '0'
-  foreach ($taskScope in @('bootstrap', 'shared', 'dev')) {
-    $taskDirectory = if ($taskScope -eq 'bootstrap') { 'bootstrap' } else { "envs/$taskScope" }
+  foreach ($taskScope in @('bootstrap', 'shared', 'dev', 'restore-staging')) {
+    $taskDirectory = switch ($taskScope) { 'bootstrap' { 'bootstrap' } 'restore-staging' { 'operations/restore-staging/terraform' } default { "envs/$taskScope" } }
     $taskReport = "reports/checkov-$taskScope-scope.json"
     $taskScanArguments = @()
     if ($taskScope -eq 'dev') { $taskScanArguments = @('--var-file', (Join-Path $taskBase 'security/dev-scan.tfvars')) }
+    if ($taskScope -eq 'restore-staging') { $taskScanArguments = @('--var-file', (Join-Path $taskBase 'security/restore-staging-scan.tfvars')) }
     & $Python $CheckovScript -d $taskDirectory --framework terraform --quiet --skip-download @taskScanArguments -o json > $taskReport
     if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov crashed in $taskScope" }
     node scripts/security-gate.mjs $taskReport $taskScope

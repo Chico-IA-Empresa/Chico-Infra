@@ -1,0 +1,28 @@
+[
+  {
+    "scope": "restore-staging",
+    "resource": "module.host[0].aws_instance.stage[0]",
+    "sourceFile": "modules/restore-staging/main.tf",
+    "sourceSha256": "b6e0aeb3ca066053a93af8b70d91f1925cb9b123e9f6106c1c15596bda4598e3",
+    "check": "CKV_AWS_126",
+    "reason": "Host temporário de conversão limitado a 48h; monitoramento detalhado não integra a proposta financeira aprovada.",
+    "compensatingControl": "Métricas EC2 básicas, verificações de status e acompanhamento privado SSM; timer UTC persistente para parada e lease IAM independente. Validar conexão, timer/reboot e progresso no host antes de copiar dados. Não promover a exceção a aceite operacional.",
+    "reference": "operations/restore-staging/README.md; docs/restore-staging-security-review.md; https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/manage-detailed-monitoring.html",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-28",
+    "expiresAt": "2026-11-26"
+  },
+  {
+    "scope": "restore-staging",
+    "resource": "module.host[0].aws_instance.stage[0]",
+    "sourceFile": "modules/restore-staging/main.tf",
+    "sourceSha256": "b6e0aeb3ca066053a93af8b70d91f1925cb9b123e9f6106c1c15596bda4598e3",
+    "check": "CKV_AWS_88",
+    "reason": "IPv4 público temporário de saída para SSM/S3 e endpoints de pacotes/imagens, sem NAT ou endpoints pagos adicionais; não há ingresso ou publicação do banco.",
+    "compensatingControl": "SG exclusivo sem ingresso e egress somente TCP443, sem SSH/EIP; IMDSv2/hop1 e disco criptografado160GiB. Recuperação somente em container sem rede/portas públicas, a provar antes da leitura de dados. Lease máximo48h e limpeza revisada incluem o custo do IPv4 no envelope privado. O plan real ainda exige revisão financeira e técnica.",
+    "reference": "operations/restore-staging/README.md; docs/restore-staging-security-review.md; https://docs.aws.amazon.com/systems-manager/latest/userguide/troubleshooting-ssm-agent.html",
+    "reviewedBy": "Codex technical review",
+    "reviewedAt": "2026-10-28",
+    "expiresAt": "2026-11-26"
+  }
+]
