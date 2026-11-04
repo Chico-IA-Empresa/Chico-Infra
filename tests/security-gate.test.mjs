@@ -8,6 +8,13 @@ const report = { summary: { passed: 1, failed: 1, parsing_errors: 0, skipped: 0 
 test('accepts only exact reviewed findings and never grants operational acceptance', () => {
   assert.equal(evaluateSecurity(report, [entry], 'dev', now).operationalAcceptance, false);
 });
+
+test('temporary restore findings require their own scope and exact source-bound exception', () => {
+  const restoreEntry = { ...entry, scope: 'restore-staging' };
+  assert.equal(evaluateSecurity(report, [restoreEntry], 'restore-staging', now).operationalAcceptance, false);
+  assert.throws(() => evaluateSecurity(report, [entry], 'restore-staging', now), /unreviewed/);
+  assert.throws(() => evaluateSecurity(report, [restoreEntry], 'dev', now), /unreviewed/);
+});
 test('new resource, check, suppression and parsing failures cannot inherit an exception', () => {
   for (const mutate of [r => { r.results.failed_checks[0].resource = 'aws_test.two'; }, r => { r.results.failed_checks[0].check_id = 'OTHER'; }, r => { r.summary.skipped = 1; }, r => { r.summary.parsing_errors = 1; }, r => { r.summary.failed = 0; }, r => { r.summary.passed = 0; }]) {
     const changed = structuredClone(report); mutate(changed); assert.throws(() => evaluateSecurity(changed, [entry], 'dev', now));

@@ -12,7 +12,7 @@ export function verifyExceptionSources(exceptions, readSource) {
 }
 
 export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
-  if (!['bootstrap', 'shared', 'dev'].includes(scope)) throw new Error('Unknown security scope');
+  if (!['bootstrap', 'shared', 'dev', 'restore-staging'].includes(scope)) throw new Error('Unknown security scope');
   if (!report?.summary || report.summary.parsing_errors !== 0 || report.summary.skipped !== 0 ||
       !Number.isInteger(report.summary.passed) || report.summary.passed < 1 ||
       !Array.isArray(report.results?.failed_checks) || report.summary.failed !== report.results.failed_checks.length) {
@@ -60,7 +60,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     const [file, scope] = process.argv.slice(2);
     const report = JSON.parse(readFileSync(file, 'utf8'));
-    const exceptions = JSON.parse(readFileSync(new URL('../security/dev-exceptions.json', import.meta.url), 'utf8'));
+    const exceptionFile = scope === 'restore-staging' ? 'restore-staging-exceptions.json' : 'dev-exceptions.json';
+    const exceptions = JSON.parse(readFileSync(new URL(`../security/${exceptionFile}`, import.meta.url), 'utf8'));
     verifyExceptionSources(exceptions, file => readFileSync(new URL(`../${file}`, import.meta.url)));
     console.log(JSON.stringify(evaluateSecurity(report, exceptions, scope)));
   } catch (error) { console.error(error.message); process.exitCode = 1; }

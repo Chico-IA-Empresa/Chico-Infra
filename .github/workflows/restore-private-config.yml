@@ -1,0 +1,133 @@
+name: Restore private configuration synthetic checks
+on:
+  pull_request:
+    paths:
+      - operations/restore-staging/**
+      - operations/restore-toolchain/**
+      - tests/restore-private-config*
+      - tests/restore-toolchain*
+      - .github/workflows/restore-private-config.yml
+  push:
+    branches: [main]
+    paths:
+      - operations/restore-staging/**
+      - operations/restore-toolchain/**
+      - tests/restore-private-config*
+      - tests/restore-toolchain*
+      - .github/workflows/restore-private-config.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-private-config-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    name: PG16 isolated clone configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Private configuration and startup template contracts
+        run: |
+          python tests/restore-private-config.test.py
+          python tests/restore-source-copy.test.py
+          bash -n operations/restore-staging/test-clone-startup.sh
+          bash -n modules/restore-staging/bootstrap.sh
+      - name: Build the current native Noble toolchain without AWS credentials
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clone-configuration-public"
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
+          sha256sum operations/restore-toolchain/runner-ca.crt > "$RUNNER_TEMP/clone-configuration-public/runner-ca.sha256"
+          sha256sum operations/restore-toolchain/Dockerfile > "$RUNNER_TEMP/clone-configuration-public/toolchain-dockerfile.sha256"
+          docker build --platform=linux/amd64 --pull --no-cache --tag chico-clone-toolchain:synthetic operations/restore-toolchain
+          test "$(docker image inspect chico-clone-toolchain:synthetic --format '{{.Architecture}}')" = amd64
+          test "$(docker image inspect chico-clone-toolchain:synthetic --format '{{.Os}}')" = linux
+          docker image inspect chico-clone-toolchain:synthetic --format '{{.Id}}' > "$RUNNER_TEMP/clone-toolchain-image-id"
+      - name: Install the pinned official scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clone-trivy-bin"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            -o "$RUNNER_TEMP/clone-trivy-linux-amd64.tar.gz"
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $RUNNER_TEMP/clone-trivy-linux-amd64.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/clone-trivy-linux-amd64.tar.gz" -C "$RUNNER_TEMP/clone-trivy-bin" trivy
+          chmod 0755 "$RUNNER_TEMP/clone-trivy-bin/trivy"
+          sha256sum "$RUNNER_TEMP/clone-trivy-bin/trivy" > "$RUNNER_TEMP/clone-configuration-public/scanner-binary.sha256"
+      - name: Require a complete scan of the exact built image before PostgreSQL execution
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/clone-empty-ignore"
+          "$RUNNER_TEMP/clone-trivy-bin/trivy" version --format json > "$RUNNER_TEMP/clone-configuration-public/scanner.json"
+          "$RUNNER_TEMP/clone-trivy-bin/trivy" image --image-src docker --platform linux/amd64 \
+            --scanners vuln --list-all-pkgs --ignore-unfixed=false --ignorefile "$RUNNER_TEMP/clone-empty-ignore" \
+            --format json --output "$RUNNER_TEMP/clone-configuration-public/scan.json" "$(cat "$RUNNER_TEMP/clone-toolchain-image-id")"
+          python - "$RUNNER_TEMP/clone-configuration-public/scan.json" "$(cat "$RUNNER_TEMP/clone-toolchain-image-id")" <<'PY'
+          import importlib.util, json, pathlib, sys
+          source = pathlib.Path('tests/restore-private-config-integration.py')
+          spec = importlib.util.spec_from_file_location('clone_integration', source)
+          integration = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(integration)
+          report = json.load(open(sys.argv[1]))
+          integration.validate_scan(report, sys.argv[2])
+          counts = {}
+          for result in report['Results']:
+              for finding in result.get('Vulnerabilities', []):
+                  severity = finding.get('Severity', 'UNKNOWN')
+                  counts[severity] = counts.get(severity, 0) + 1
+          print(json.dumps({'exactImageScanPassed': True, 'counts': counts, 'realRestoreApproved': False}))
+          PY
+      - name: Preserve SQLXML, encrypted full/diff and recovery checks on these same bytes
+        run: |
+          set -euo pipefail
+          sudo "$(command -v python)" tests/restore-toolchain-integration.py \
+            --image "$(cat "$RUNNER_TEMP/clone-toolchain-image-id")" \
+            --evidence "$RUNNER_TEMP/clone-toolchain-synthetic"
+      - name: Demonstrate PG16 config precedence and suppress role preloads
+        env:
+          CHICO_CLONE_INTEGRATION: 'true'
+        run: |
+          sudo --preserve-env=CHICO_CLONE_INTEGRATION "$(command -v python)" \
+            tests/restore-private-config-integration.py \
+            --image "$(cat "$RUNNER_TEMP/clone-toolchain-image-id")" \
+            --scan "$RUNNER_TEMP/clone-configuration-public/scan.json" \
+            --evidence "$RUNNER_TEMP/clone-configuration-synthetic"
+      - name: Export only synthetic booleans and package/binary provenance
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clone-configuration-public"
+          for relative in summary.json private/postgres-binary.sha256; do
+            source="$RUNNER_TEMP/clone-configuration-synthetic/$relative"
+            if sudo test -f "$source"; then
+              sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" \
+                "$source" "$RUNNER_TEMP/clone-configuration-public/$(basename "$relative")"
+            fi
+          done
+          if sudo test -f "$RUNNER_TEMP/clone-toolchain-synthetic/summary.json"; then
+            sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" \
+              "$RUNNER_TEMP/clone-toolchain-synthetic/summary.json" "$RUNNER_TEMP/clone-configuration-public/toolchain-summary.json"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: clone-configuration-synthetic
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/clone-configuration-public/summary.json
+            ${{ runner.temp }}/clone-configuration-public/postgres-binary.sha256
+            ${{ runner.temp }}/clone-configuration-public/toolchain-summary.json
+            ${{ runner.temp }}/clone-configuration-public/scan.json
+            ${{ runner.temp }}/clone-configuration-public/scanner.json
+            ${{ runner.temp }}/clone-configuration-public/scanner-binary.sha256
+            ${{ runner.temp }}/clone-configuration-public/toolchain-dockerfile.sha256
+            ${{ runner.temp }}/clone-configuration-public/runner-ca.sha256
