@@ -1,0 +1,122 @@
+name: Restore toolchain synthetic checks
+on:
+  pull_request:
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
+      - .github/workflows/restore-toolchain.yml
+  push:
+    branches: [main]
+    paths:
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain*
+      - tests/restore-zlib-vex*
+      - .github/workflows/restore-toolchain.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-toolchain-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic:
+    name: PG16 pgBackRest synthetic recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Offline parser and isolation contracts
+        run: |
+          python tests/restore-toolchain.test.py
+          python tests/restore-zlib-vex.test.py
+          python tests/restore-zlib-vex-collector.test.py
+          bash -n operations/restore-toolchain/fixture_prepare.sh
+      - name: Build immutable-source amd64 toolchain without AWS credentials
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
+          sha256sum operations/restore-toolchain/runner-ca.crt > "$RUNNER_TEMP/restore-toolchain-runner-ca.sha256"
+          docker build --platform=linux/amd64 --pull --tag chico-restore-toolchain:synthetic operations/restore-toolchain
+          test "$(docker image inspect chico-restore-toolchain:synthetic --format '{{.Architecture}}')" = amd64
+          test "$(docker image inspect chico-restore-toolchain:synthetic --format '{{.Os}}')" = linux
+          docker image inspect chico-restore-toolchain:synthetic --format '{{.Id}}' > "$RUNNER_TEMP/restore-toolchain-image-id"
+      - name: Real binary encrypted full/diff verify, corruption rejection and isolated recovery
+        run: |
+          set -euo pipefail
+          sudo "$(command -v python)" tests/restore-toolchain-integration.py \
+            --image "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" \
+            --evidence "$RUNNER_TEMP/restore-toolchain-evidence"
+      - name: Export only synthetic allowlist to runner-owned directory
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/restore-toolchain-public"
+          for name in summary.json failure-summary.json provenance.txt verify-0.txt verify-1.txt verify-corrupt.txt zlib-runtime-evidence.json zlib-package-inventory.txt zlib-package-files.txt; do
+            source="$RUNNER_TEMP/restore-toolchain-evidence/$name"
+            if sudo test -f "$source"; then
+              sudo install -m 0644 -o "$(id -u)" -g "$(id -g)" "$source" "$RUNNER_TEMP/restore-toolchain-public/$name"
+            fi
+          done
+      - name: Install pinned official scanner binary without a third-party Action
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            -o "$RUNNER_TEMP/trivy-linux-amd64.tar.gz"
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $RUNNER_TEMP/trivy-linux-amd64.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trivy-linux-amd64.tar.gz" -C "$RUNNER_TEMP/trivy-bin" trivy
+          chmod 0755 "$RUNNER_TEMP/trivy-bin/trivy"
+          printf '%s\n' "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+          sha256sum "$RUNNER_TEMP/trivy-bin/trivy" > "$RUNNER_TEMP/restore-toolchain-public/scanner-binary.sha256"
+      - name: Known vulnerability inventory; critical findings block
+        run: |
+          set -euo pipefail
+          trivy version --format json > "$RUNNER_TEMP/restore-toolchain-public/scanner.json"
+          : > "$RUNNER_TEMP/restore-toolchain-empty-ignore"
+          trivy image --image-src docker --platform linux/amd64 --scanners vuln --list-all-pkgs --ignore-unfixed=false --ignorefile "$RUNNER_TEMP/restore-toolchain-empty-ignore" --format json \
+            --output "$RUNNER_TEMP/restore-toolchain-public/scan.json" "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")"
+          python - "$RUNNER_TEMP/restore-toolchain-public/scan.json" "$(cat "$RUNNER_TEMP/restore-toolchain-image-id")" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          assert report.get("Metadata", {}).get("ImageID") == sys.argv[2], "Scan/image binding differs"
+          assert report.get("Metadata", {}).get("OS", {}).get("Family") == "ubuntu", "Expected native Ubuntu inventory"
+          assert report["Metadata"]["OS"].get("Name") == "24.04", "Expected Noble inventory"
+          assert any(r.get("Class") == "os-pkgs" and r.get("Type") == "ubuntu" and r.get("Packages") for r in report.get("Results", [])), "Complete OS package inventory required"
+          assert report.get('SchemaVersion') == 2 and report.get('Results'), 'Unknown scan report'
+          vulnerabilities = [v for result in report['Results'] for v in result.get('Vulnerabilities', [])]
+          assert not any(v.get('Severity') == 'CRITICAL' for v in vulnerabilities), 'Critical findings require remediation/review'
+          print(json.dumps({'scanCompleted': True, 'criticalFindings': 0,
+                            'highFindings': sum(v.get('Severity') == 'HIGH' for v in vulnerabilities),
+                            'realRestoreApproved': False}))
+          PY
+      - name: Publish only synthetic summary, package/binary provenance and scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: restore-toolchain-synthetic-evidence
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/restore-toolchain-public/summary.json
+            ${{ runner.temp }}/restore-toolchain-public/failure-summary.json
+            ${{ runner.temp }}/restore-toolchain-public/provenance.txt
+            ${{ runner.temp }}/restore-toolchain-public/scan.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner.json
+            ${{ runner.temp }}/restore-toolchain-public/scanner-binary.sha256
+            ${{ runner.temp }}/restore-toolchain-public/verify-0.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-1.txt
+            ${{ runner.temp }}/restore-toolchain-public/verify-corrupt.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-runtime-evidence.json
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-inventory.txt
+            ${{ runner.temp }}/restore-toolchain-public/zlib-package-files.txt
+            ${{ runner.temp }}/restore-toolchain-runner-ca.sha256
