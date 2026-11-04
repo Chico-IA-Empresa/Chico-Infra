@@ -1,12 +1,12 @@
-# Candidato privado: toolchain PostgreSQL16 de fornecedor coerente
+# Toolchain sintético de restore PostgreSQL16
 
-Preparado em04/11/2026 sobre o draftPR16, commit45909f8b2c2f239cc148bc8e5b94a6dcaefeb7c9. Este pacote NÃO foi publicado, construído, integrado ou aprovado para dados reais. A closure do draft inteiro está no manifest do candidato; um Dockerfile isolado não autoriza integrar PR16 nem outros drafts.
+Toolchain amd64 para validar PostgreSQL16 e pgBackRest em fixtures sintéticas novas, com pacotes e headers do mesmo fornecedor. O workflow `restore-toolchain.yml` constrói a imagem, executa as provas Linux e publica evidências sintéticas e o scan dos bytes finais. A integração deste código não aprova dados reais, staging, publicação da imagem ou instalação no host; esses usos mantêm revisões e gates próprios.
 
 ## Mudança proposta
 
 Usar UbuntuNoble tanto no build quanto no runtime, com PostgreSQL16.15 nativo do arquivo Ubuntu e libxml2 do mesmo fornecedor; compilar pgBackRest2.57.0 contra headersNoble. Isso elimina a mistura de consumidores Bookworm com uma biblioteca Ubuntu em /opt, sem desabilitar XML/SQLXML ou omitir pacotes do scan.
 
-- Base oficialubuntu24.04 amd64: sha256:78d4744ead1f5b19b04d0df558ab182a5300903900755e515b2ca4d10eb2044d. Manifest child baixado e SHA256 conferido; metadata/base scan ficam fora da closure pública em ../.
+- Base oficialubuntu24.04 amd64: sha256:78d4744ead1f5b19b04d0df558ab182a5300903900755e515b2ca4d10eb2044d. O manifest child e seu SHA256 foram conferidos na revisão. O scan da base não substitui o scan da imagem final com PostgreSQL/pgBackRest, publicado pelo workflow.
 - PostgreSQL/client/libpq:16.15-0ubuntu0.24.04.1, pacotes nativosUbuntuNoble. A versão16.13 era pin do candidatoPR16/testes, não requisito do plano canônico, que exigePG16. A troca de minor é explícita e precisa de revisão.
 - libxml2/libxml2-dev:2.9.14+dfsg-1.3ubuntu3.10. A [página Ubuntu CVE-2026-6653](https://ubuntu.com/security/CVE-2026-6653) registra correçãoNoble desde3.8; o [pacote atualizado](https://packages.ubuntu.com/noble-updates/libxml2) publica3.10.
 - O build oficial[33517303](https://launchpad.net/~ubuntu-security-proposed/+archive/ubuntu/ppa/+build/33517303) do [PostgreSQL16.15](https://packages.ubuntu.com/noble-updates/postgresql-16) usou libxml2 e headers3.8 já corrigidos, libc2.39 eICU74. Não é o binárioBookworm dePR16. O buildlog oficial filtrado fica no diretório de revisão privado.
