@@ -1,0 +1,33 @@
+{
+  "canonicalSource": "40d0373808b8f5648c3c8d326107b87345cef7f0",
+  "files": [
+    {
+      "path": ".github/workflows/restore-toolchain.yml",
+      "sha256": "a37e5da5bec6b73273416bbc74e508e82ab3a25f27beef5ec42d09bd6e6b8e3f"
+    },
+    {
+      "path": "operations/restore-toolchain/Dockerfile",
+      "sha256": "31ce9fc5be12170efee7d3c3c285046d5806739ab98ffb0d06b6a2c24fdbc54e"
+    },
+    {
+      "path": "operations/restore-toolchain/.dockerignore",
+      "sha256": "66ccc329e65fdab448036f591dc2ac33bc0a402e09b8eac39111ebf7b809366d"
+    },
+    {
+      "path": "operations/restore-toolchain/fixture_prepare.sh",
+      "sha256": "435f878b92612531aed26434eb6de8a7d2cbef91148f2d478d48b3d81bfe2c0d"
+    },
+    {
+      "path": "operations/restore-toolchain/isolated_run.py",
+      "sha256": "a6452225672b2930b0bb411b0e30dfc63f4980645d9b4a9559717ae7b2fc98ce"
+    },
+    {
+      "path": "operations/restore-toolchain/verify_report.py",
+      "sha256": "f9731bd49c83ab4ca8fc9b828e8b2cc864be4be73a8d2e4ad0cc20105c8008e4"
+    },
+    {
+      "path": "tests/restore-toolchain-integration.py",
+      "sha256": "6da313e9ec6b3bfd87d91eb3ebd983479a7531de7fb2803bac1771d067575940"
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+name: Restore toolchain delivery to existing ECR
+on:
+  pull_request:
+    paths:
+      - .github/workflows/restore-toolchain-delivery.yml
+      - scripts/*restore-toolchain*
+      - tests/restore-toolchain-delivery.test.mjs
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain-integration.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/restore-toolchain-delivery.yml
+      - scripts/*restore-toolchain*
+      - tests/restore-toolchain-delivery.test.mjs
+      - operations/restore-toolchain/**
+      - tests/restore-toolchain-integration.py
+  workflow_dispatch:
+    inputs:
+      review_sha256:
+        description: SHA256 of the exact private source/package/storage review JSON
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'infra-dev' || format('restore-delivery-check-{0}', github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: false
+jobs:
+  checks:
+    name: Toolchain delivery native checks without AWS
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - run: node --test tests/restore-toolchain-delivery.test.mjs
+      - run: bash -n scripts/build-restore-toolchain.sh && bash -n scripts/publish-restore-toolchain.sh
+      - run: bash scripts/build-restore-toolchain.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: toolchain-delivery-native-package-evidence
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/restore-toolchain-delivery-public/
+  preflight:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    env:
+      REVIEW_SHA256: ${{ inputs.review_sha256 }}
+      RESTORE_TOOLCHAIN_DELIVERY_REVIEW_JSON: ${{ secrets.RESTORE_TOOLCHAIN_DELIVERY_REVIEW_JSON }}
+      FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+      DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+      BUILD_ROLE_ARN: ${{ vars.BUILD_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Recheck source governance and exact reviewed release before approval
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+          node scripts/restore-toolchain-delivery.mjs gate
+  publish:
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: infra-apply-dev
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      REVIEW_SHA256: ${{ inputs.review_sha256 }}
+      RESTORE_TOOLCHAIN_DELIVERY_REVIEW_JSON: ${{ secrets.RESTORE_TOOLCHAIN_DELIVERY_REVIEW_JSON }}
+      FUNDING_REVIEW_VALID_UNTIL: ${{ vars.FUNDING_REVIEW_VALID_UNTIL }}
+      DEV_EXECUTION_APPROVED: ${{ vars.DEV_EXECUTION_APPROVED }}
+      BUILD_ROLE_ARN: ${{ vars.BUILD_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Recheck source governance and release after human approval
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
+          node scripts/github-readiness.mjs apply
+          node scripts/restore-toolchain-delivery.mjs gate
+      - name: Fresh native build synthetic recovery and complete scan without AWS credentials
+        run: bash scripts/build-restore-toolchain.sh
+      - name: Bind fresh bytes to privately reviewed package finding and storage bounds before OIDC
+        id: release
+        run: |
+          node scripts/restore-toolchain-delivery.mjs evidence "$RUNNER_TEMP/restore-toolchain-delivery-public"
+          node scripts/restore-toolchain-delivery.mjs publication-gate
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ steps.release.outputs.role_arn }}
+          role-session-name: restore-toolchain-${{ github.run_id }}
+          aws-region: sa-east-1
+          allowed-account-ids: '306915830875'
+          unset-current-credentials: true
+      - name: Publish only scanned bytes and verify exact digest and ECR scan
+        env:
+          GH_TOKEN: ${{ secrets.GH_GOVERNANCE_READ_TOKEN }}
+        run: bash scripts/publish-restore-toolchain.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: toolchain-delivery-package-evidence
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/restore-toolchain-delivery-public/
