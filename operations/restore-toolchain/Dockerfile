@@ -11,7 +11,7 @@ RUN set -eux \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        ca-certificates curl gcc libc6-dev meson ninja-build pkg-config \
        libbz2-dev liblz4-dev libpq-dev=16.15-0ubuntu0.24.04.1 libssl-dev \
-       libxml2-dev=2.9.14+dfsg-1.3ubuntu3.10 libyaml-dev libzstd-dev zlib1g-dev \
+       libxml2-dev=2.9.14+dfsg-1.3ubuntu3.10 libpcre2-8-0=10.42-4ubuntu2.2 libyaml-dev libzstd-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN set -eux \
     && curl --fail --location --proto '=https' --tlsv1.2 \
@@ -47,7 +47,7 @@ RUN set -eux \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.conf \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        postgresql-16=16.15-0ubuntu0.24.04.1 postgresql-client-16=16.15-0ubuntu0.24.04.1 \
-       libpq5=16.15-0ubuntu0.24.04.1 libxml2=2.9.14+dfsg-1.3ubuntu3.10 \
+       libpq5=16.15-0ubuntu0.24.04.1 libxml2=2.9.14+dfsg-1.3ubuntu3.10 libpcre2-8-0=10.42-4ubuntu2.2 \
        libbz2-1.0 liblz4-1 libzstd1 libyaml-0-2 locales-all \
     && test ! -e /var/lib/postgresql/16/main/PG_VERSION \
     && test ! -e /etc/postgresql/16/main/postgresql.conf \
