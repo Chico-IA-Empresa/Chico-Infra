@@ -43,3 +43,24 @@ run "enabled_root_requires_private_preflight_besides_funding" {
   }
   expect_failures = [terraform_data.readiness]
 }
+run "classification_does_not_substitute_for_reviewed_sensitive_data_handling" {
+  command = plan
+  variables {
+    provision_enabled = true
+    credit_approval   = { account_id = "306915830875", evidence_reference = "synthetic-mock-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+    restore_preflight = {
+      evidence_reference                        = "synthetic-mock-only"
+      source_manifest_sha256                    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      selected_versions_and_metadata_reviewed   = true
+      source_classification_reviewed            = true
+      data_handling_reviewed                    = false
+      capacity_160gib_48h_approved              = true
+      private_cipher_transfer_reviewed          = true
+      toolchain_and_pre_restore_checks_reviewed = true
+      destination_and_dev_ready                 = true
+      no_concurrent_arm_builder                 = true
+      business_writers_disabled                 = true
+    }
+  }
+  expect_failures = [terraform_data.readiness]
+}

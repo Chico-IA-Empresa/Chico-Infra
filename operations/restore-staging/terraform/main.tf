@@ -61,6 +61,8 @@ variable "restore_preflight" {
     evidence_reference                        = string
     source_manifest_sha256                    = string
     selected_versions_and_metadata_reviewed   = bool
+    source_classification_reviewed            = bool
+    data_handling_reviewed                    = bool
     capacity_160gib_48h_approved              = bool
     private_cipher_transfer_reviewed          = bool
     toolchain_and_pre_restore_checks_reviewed = bool
@@ -91,6 +93,8 @@ resource "terraform_data" "readiness" {
         length(trimspace(var.restore_preflight.evidence_reference)) > 0 &&
         var.restore_preflight.source_manifest_sha256 == var.source_manifest_sha256 &&
         var.restore_preflight.selected_versions_and_metadata_reviewed &&
+        var.restore_preflight.source_classification_reviewed &&
+        var.restore_preflight.data_handling_reviewed &&
         var.restore_preflight.capacity_160gib_48h_approved &&
         var.restore_preflight.private_cipher_transfer_reviewed &&
         var.restore_preflight.toolchain_and_pre_restore_checks_reviewed &&
