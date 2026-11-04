@@ -20,3 +20,4 @@ reports/*
 *.pfx
 *.p12
 review-manifest.json
+/operations/restore-toolchain/runner-ca.crt
