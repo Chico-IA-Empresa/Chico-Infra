@@ -1,0 +1,74 @@
+name: Source catalogue native synthetic checks
+on:
+  pull_request:
+    paths:
+      - .github/workflows/restore-catalogue.yml
+      - operations/restore-staging/catalogue/**
+      - operations/restore-toolchain/Dockerfile
+      - tests/restore-minimal-catalogue*
+      - tests/restore-private-config-integration.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/restore-catalogue.yml
+      - operations/restore-staging/catalogue/**
+      - operations/restore-toolchain/Dockerfile
+      - tests/restore-minimal-catalogue*
+      - tests/restore-private-config-integration.py
+permissions:
+  contents: read
+concurrency:
+  group: catalogue-native-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Synthetic unit boundaries and shell syntax
+        run: |
+          python tests/restore-minimal-catalogue.test.py
+          bash -n operations/restore-staging/catalogue/catalogue_fixture.sh
+      - name: Build and scan exact local native image without AWS credentials
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for task_key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_CREDENTIALS_RELATIVE_URI; do
+            test -z "${!task_key:-}"
+          done
+          task_private="$RUNNER_TEMP/catalogue-native-private"
+          task_public="$RUNNER_TEMP/catalogue-native-public"
+          mkdir -m 0700 "$task_private" "$task_public" "$task_private/trivy" "$task_private/docker"
+          unset DOCKER_HOST DOCKER_CONTEXT
+          export DOCKER_CONFIG="$task_private/docker"
+          install -m 0644 /etc/ssl/certs/ca-certificates.crt operations/restore-toolchain/runner-ca.crt
+          docker build --platform linux/amd64 --pull --no-cache --tag chico-catalogue-native:ci operations/restore-toolchain > "$task_private/build.log" 2>&1
+          docker image inspect chico-catalogue-native:ci --format '{{.Id}}' > "$task_private/image-id.txt"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz -o "$task_private/trivy.tar.gz"
+          echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $task_private/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$task_private/trivy.tar.gz" -C "$task_private/trivy" trivy
+          : > "$task_private/empty-ignore"
+          "$task_private/trivy/trivy" image --image-src docker --platform linux/amd64 --scanners vuln --list-all-pkgs --ignore-unfixed=false --ignorefile "$task_private/empty-ignore" --format json --output "$task_public/scan.json" "$(cat "$task_private/image-id.txt")"
+          "$task_private/trivy/trivy" version --format json > "$task_public/scanner.json"
+      - name: Real PG16 paused standby, primary refusal and catalogue exclusion proof
+        run: |
+          set -Eeuo pipefail
+          export CHICO_CATALOGUE_SYNTHETIC=true
+          sudo --preserve-env=CHICO_CATALOGUE_SYNTHETIC "$(command -v python)" tests/restore-minimal-catalogue-integration.py \
+            --image "$(cat "$RUNNER_TEMP/catalogue-native-private/image-id.txt")" \
+            --scan "$RUNNER_TEMP/catalogue-native-public/scan.json" \
+            --private-evidence "$RUNNER_TEMP/catalogue-native-private/session" \
+            --summary "$RUNNER_TEMP/catalogue-native-public/summary.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: catalogue-native-synthetic-summary
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/catalogue-native-public/
