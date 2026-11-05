@@ -45,6 +45,7 @@ tar -xzf "$task_work/trivy.tar.gz" -C "$task_work/trivy" trivy
 : > "$task_work/empty-ignore"
 task_stage=complete-scan
 "$task_work/trivy/trivy" image --image-src docker --platform linux/amd64 --scanners vuln \
+  --db-repository ghcr.io/aquasecurity/trivy-db:2 \
   --list-all-pkgs --ignore-unfixed=false --ignorefile "$task_work/empty-ignore" --format json \
   --output "$task_public/scan.json" "$task_image"
 "$task_work/trivy/trivy" version --format json > "$task_public/scanner.json"
