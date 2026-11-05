@@ -7,8 +7,12 @@ COPY runner-ca.crt /etc/ssl/certs/ca-certificates.crt
 RUN set -eux \
     && sha256sum /etc/ssl/certs/ca-certificates.crt > /opt/chico-apt-bootstrap-ca.sha256 \
     && sed -i 's|http://|https://|g' /etc/apt/sources.list.d/* \
-    && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    && apt-get -o Acquire::Retries=0 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
+       apt=2.8.4ubuntu0.1 libapt-pkg6.0t64=2.8.4ubuntu0.1 \
+    && test "$(dpkg-query -W -f='${Version}' apt)" = '2.8.4ubuntu0.1' \
+    && test "$(dpkg-query -W -f='${Version}' libapt-pkg6.0t64)" = '2.8.4ubuntu0.1' \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
        ca-certificates curl gcc libc6-dev meson ninja-build pkg-config \
        libbz2-dev liblz4-dev libpq-dev=16.15-0ubuntu0.24.04.1 libssl-dev \
        libxml2-dev=2.9.14+dfsg-1.3ubuntu3.10 libpcre2-8-0=10.42-4ubuntu2.2 libyaml-dev libzstd-dev zlib1g-dev \
@@ -42,10 +46,14 @@ RUN set -eux \
     && chmod 0755 /usr/sbin/policy-rc.d \
     && groupadd --system --gid 999 postgres \
     && useradd --system --uid 999 --gid 999 --home-dir /var/lib/postgresql --create-home --shell /bin/bash postgres \
-    && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates postgresql-common \
+    && apt-get -o Acquire::Retries=0 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
+       apt=2.8.4ubuntu0.1 libapt-pkg6.0t64=2.8.4ubuntu0.1 \
+    && test "$(dpkg-query -W -f='${Version}' apt)" = '2.8.4ubuntu0.1' \
+    && test "$(dpkg-query -W -f='${Version}' libapt-pkg6.0t64)" = '2.8.4ubuntu0.1' \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --no-install-recommends ca-certificates postgresql-common \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.conf \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
        postgresql-16=16.15-0ubuntu0.24.04.1 postgresql-client-16=16.15-0ubuntu0.24.04.1 \
        libpq5=16.15-0ubuntu0.24.04.1 libxml2=2.9.14+dfsg-1.3ubuntu3.10 libpcre2-8-0=10.42-4ubuntu2.2 \
        libbz2-1.0 liblz4-1 libzstd1 libyaml-0-2 locales-all \
