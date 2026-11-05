@@ -136,6 +136,10 @@ def main():
         with args.summary.open('x') as stream:
             json.dump(summary, stream)
             stream.write('\n')
+            stream.flush()
+            # Only this fixed public summary is readable by the runner uploader.
+            # Raw catalogue and diagnostics retain private modes and directories.
+            os.fchmod(stream.fileno(), 0o644)
         print('Native synthetic catalogue proof completed; private identifiers/output omitted')
     finally:
         if session is not None:
