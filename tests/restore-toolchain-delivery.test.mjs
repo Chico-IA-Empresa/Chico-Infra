@@ -1,7 +1,22 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
-import {target,workflowRef,maxImageBytes,validateReview,scanFacts,validateEvidence,repositoryInventory,validateAwsContext,verifyManifest,verifyEcrScan} from '../scripts/restore-toolchain-delivery.mjs';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';
+import {target,workflowRef,maxImageBytes,guardedInputs,validateReview,scanFacts,validateEvidence,repositoryInventory,validateAwsContext,verifyManifest,verifyEcrScan} from '../scripts/restore-toolchain-delivery.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex'),digest=c=>'sha256:'+c.repeat(64),now=new Date('2026-11-04T13:00:00Z'),commit='a'.repeat(40),runId='12345678';
 const image=digest('b'),layer=digest('c');
+test('reviewed source amendment remains byte-bound and rejects a changed Dockerfile',()=>{
+ const root=fileURLToPath(new URL('../',import.meta.url)),manifest=JSON.parse(fs.readFileSync(new URL('../scripts/restore-toolchain-delivery-inputs.json',import.meta.url)));
+ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'chico-source-gate-'));
+ try{
+  for(const file of manifest.files){const destination=path.join(temporary,file.path);fs.mkdirSync(path.dirname(destination),{recursive:true});fs.copyFileSync(path.join(root,file.path),destination);}
+  assert.equal(guardedInputs(temporary),guardedInputs(root));
+  fs.appendFileSync(path.join(temporary,'operations/restore-toolchain/Dockerfile'),'\n# unreviewed source change\n');
+  assert.throws(()=>guardedInputs(temporary),/source or existing CI gates changed/);
+ }finally{
+  assert.equal(path.dirname(path.resolve(temporary)),path.resolve(os.tmpdir()));
+  assert.ok(path.basename(temporary).startsWith('chico-source-gate-'));
+  fs.rmSync(temporary,{recursive:true,force:true});
+ }
+});
 const scan=()=>({SchemaVersion:2,Metadata:{ImageID:image,OS:{Family:'ubuntu',Name:'24.04'},ImageConfig:{architecture:'amd64',os:'linux'},DiffIDs:[layer]},Results:[{Class:'os-pkgs',Type:'ubuntu',Packages:[{Name:'synthetic-package',Version:'1.2',Release:'0ubuntu1',Arch:'amd64'}],Vulnerabilities:[{VulnerabilityID:'CVE-SYNTHETIC',PkgName:'synthetic-package',InstalledVersion:'1.2-0ubuntu1',Severity:'MEDIUM',Status:'affected'}]}]});
 const inventory=()=>({imageDetails:[{registryId:target.account,repositoryName:target.repository,imageDigest:digest('d'),imageSizeInBytes:100,imageTags:['synthetic-existing']}]});
 function fixture(){const facts=scanFacts(scan()),review={account_id:target.account,provision_enabled:true,credit_approval:{account_id:target.account,all_charges_covered:true,shutdown_reserve_confirmed:true,evidence_reference:'synthetic offline metadata; not an authorization',reviewed_on:'2026-11-03',expires_on:'2026-11-10'},proof:{scope:'restore-toolchain-delivery',operation:'publish-existing-ecr',source_commit:commit,expected_run_number:42,repository_name:target.repository,platform:'linux/amd64',inputs_sha256:'e'.repeat(64),reviewed_findings_sha256:facts.findingsHash,reviewed_inventory_sha256:facts.inventoryHash,repository_inventory_sha256:repositoryInventory(inventory()).hash,package_review_reference:'synthetic-only',storage:{approval_reference:'synthetic-only',retention_until_utc:'2026-11-05T13:00:00Z',cleanup_review_reference:'synthetic-only',max_image_size_bytes:maxImageBytes}}};const raw=JSON.stringify(review);const context={repository:target.github,ref:'refs/heads/main',eventName:'workflow_dispatch',workflowRef,runNumber:'42',commit,runId,runAttempt:'1',roleArn:target.role,reviewHash:hash(raw),inputsHash:'e'.repeat(64),approved:'true',validUntil:'2026-11-04T20:00:00Z',now};return {review,raw,context};}

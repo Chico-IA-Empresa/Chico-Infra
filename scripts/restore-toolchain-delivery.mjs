@@ -18,7 +18,7 @@ const awsTime=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.
 const requiredInputs=['.github/workflows/restore-toolchain.yml','operations/restore-toolchain/Dockerfile','operations/restore-toolchain/.dockerignore','operations/restore-toolchain/fixture_prepare.sh','operations/restore-toolchain/isolated_run.py','operations/restore-toolchain/verify_report.py','tests/restore-toolchain-integration.py'];
 export function guardedInputs(root){
  const manifest=JSON.parse(fs.readFileSync(new URL('./restore-toolchain-delivery-inputs.json',import.meta.url)));
- if(manifest.canonicalSource!=='40d0373808b8f5648c3c8d326107b87345cef7f0'||!Array.isArray(manifest.files)||manifest.files.length!==requiredInputs.length||JSON.stringify(manifest.files.map(f=>f.path).sort())!==JSON.stringify([...requiredInputs].sort()))throw Error('Canonical source input set differs');
+ if(manifest.canonicalSource!=='40d0373808b8f5648c3c8d326107b87345cef7f0'||manifest.reviewedAmendment!=='noble-apt-2.8.4ubuntu0.1'||!Array.isArray(manifest.files)||manifest.files.length!==requiredInputs.length||JSON.stringify(manifest.files.map(f=>f.path).sort())!==JSON.stringify([...requiredInputs].sort()))throw Error('Canonical source input set differs');
  for(const f of manifest.files){const p=path.resolve(root,f.path);if(!p.startsWith(path.resolve(root)+path.sep)||fs.lstatSync(p).isSymbolicLink()||!sha(f.sha256)||hash(fs.readFileSync(p))!==f.sha256)throw Error('Canonical toolchain source or existing CI gates changed');}
  return hash(JSON.stringify(manifest.files));
 }
