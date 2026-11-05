@@ -75,6 +75,7 @@ def main():
         container = run(command).decode().strip()
         if not re.fullmatch('[a-f0-9]{64}', container):
             raise ValueError('Unexpected created-container identity')
+        print('Synthetic stage: fixture-start', flush=True)
         for _ in range(60):
             state = inspect(container)
             if not state['State']['Running']:
@@ -85,15 +86,23 @@ def main():
                 break
             time.sleep(1)
         else:
+            # Fixed stage identifiers only; no SQL/stderr/catalogue is emitted.
+            stage = run(['/usr/bin/docker','exec',container,'/usr/bin/cat','/work/stage']).decode().strip()
+            if stage in {'initdb','primary-start','fixture-create','synthetic-basebackup','standby-start','pause-request','pause-wait'}:
+                print('Synthetic fixture timeout at: ' + stage, flush=True)
             raise ValueError('Synthetic readiness timeout')
+        print('Synthetic stage: primary-admission-query', flush=True)
         session = PsqlSession(container, 'synthetic_fixture', '/tmp/source-socket', root / 'primary-errors-private.log')
         session.execute(catalogue.TRANSACTION)
         primary_gate = catalogue.decode(session.query(catalogue.GATE_SQL, catalogue.MAX_RESPONSE_BYTES))
         session.execute('ROLLBACK;')
         session.close()
+        if primary_gate['recovery'] is not False or primary_gate['paused'] is not False or primary_gate['pauseState'] != 'not in recovery':
+            raise ValueError('Expected actual primary state')
         context = {'sourceManifestSHA256': catalogue.SOURCE_SHA256, 'queryPlanSHA256': catalogue.query_plan_sha256(),
                    'database': 'synthetic_fixture', 'systemIdentifier': primary_gate['systemIdentifier'],
                    'serverVersionNum': primary_gate['version']}
+        print('Synthetic stage: actual-primary-refusal', flush=True)
         session = PsqlSession(container, 'synthetic_fixture', '/tmp/source-socket', root / 'primary-reject-errors-private.log')
         try:
             catalogue.collect(session, root / 'primary-rejected', context)
@@ -103,6 +112,7 @@ def main():
             session.close()
         if not primary_rejected:
             raise ValueError('Actual primary gate was not refused')
+        print('Synthetic stage: paused-standby-collection', flush=True)
         session = PsqlSession(container, 'synthetic_fixture', '/tmp/standby-socket', root / 'standby-errors-private.log')
         result = catalogue.collect(session, root / 'paused-private', context)
         session.close()
