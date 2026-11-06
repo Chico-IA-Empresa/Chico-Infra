@@ -2,7 +2,7 @@ variable "account_id" {
   type = string
   validation {
     condition     = var.account_id == "306915830875"
-    error_message = "Conta aprovada da fase 1 obrigatória."
+    error_message = "Conta aprovada da fase 1 obrigatÃ³ria."
   }
 }
 variable "owner" { type = string }
@@ -55,6 +55,20 @@ variable "expires_at_utc" {
   type    = string
   default = null
 }
+variable "toolchain_delivery" {
+  description = "Optional private image-delivery review metadata. No grant unless explicitly supplied; does not approve image use or data handling."
+  type        = object({ repository_arn = string, image_digest = string, evidence_reference = string })
+  default     = null
+  validation {
+    condition = var.toolchain_delivery == null || try(
+      var.toolchain_delivery.repository_arn == "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers" &&
+      can(regex("^sha256:[a-f0-9]{64}$", var.toolchain_delivery.image_digest)) &&
+      length(trimspace(var.toolchain_delivery.evidence_reference)) > 0 &&
+      length(var.toolchain_delivery.evidence_reference) <= 200 &&
+    !can(regex("[\\r\\n]", var.toolchain_delivery.evidence_reference)), false)
+    error_message = "Only reviewed chico-workers digest/evidence metadata is accepted; no tag, foreign repository or empty reference."
+  }
+}
 variable "restore_preflight" {
   description = "Private review metadata, not proof. Full source/cipher/toolchain/capacity evidence and saved-plan approval are retained by the private executor."
   type = object({
@@ -104,7 +118,7 @@ resource "terraform_data" "readiness" {
         timecmp(var.not_before_utc, plantimestamp()) <= 0 &&
         timecmp(var.expires_at_utc, plantimestamp()) > 0,
       false)
-      error_message = "Staging exige lease atual e revisão privada real de seleção, capacidade, cipher, toolchain, destino e isolamento. Não preencher com fixture."
+      error_message = "Staging exige lease atual e revisÃ£o privada real de seleÃ§Ã£o, capacidade, cipher, toolchain, destino e isolamento. NÃ£o preencher com fixture."
     }
   }
 }
@@ -118,6 +132,7 @@ module "access" {
   source_version_policy_documents = var.source_version_policy_documents
   destination_bucket_name         = var.destination_bucket_name
   import_id                       = var.import_id
+  toolchain_delivery              = var.toolchain_delivery
   not_before_utc                  = var.not_before_utc
   expires_at_utc                  = var.expires_at_utc
   depends_on                      = [module.funding, terraform_data.readiness]
