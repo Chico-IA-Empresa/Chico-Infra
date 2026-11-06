@@ -3,8 +3,11 @@ set -euo pipefail
 umask 077
 test "${CHICO_SYNTHETIC_ONLY:-}" = true
 test "$(id -u)" = 0
-command -v asm-exec >/dev/null
-# Runtime wrapper resolves this fixed synthetic Dev reference. Never print output.
-# Host helper owns 0600 tmpfs file; only the intended synthetic consumer gets a bind.
-asm-exec -- python3 /opt/chico-dev-fixture/config-consumer.py \
-  '{{resolve:secretsmanager:/chico/dev/api/SYNTHETIC_TOKEN}}'
+test -x /usr/local/bin/asm-exec
+test "$#" = 1
+[[ "$1" =~ ^[a-f0-9]{32}$ ]]
+export AWS_REGION=sa-east-1
+# The supplied asm-exec main resolves argv only, despite its env documentation.
+# The adapter pins/imports its resolver in-process: no plaintext argv, Docker env,
+# stdout, or rewrite of an earlier launch's mounted file.
+exec python3 /opt/chico-dev-fixture/config-consumer.py deliver --launch-id "$1"
