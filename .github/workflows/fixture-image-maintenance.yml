@@ -1,14 +1,26 @@
 name: Dev fixture image maintenance review only
 on:
   workflow_dispatch:
+    inputs:
+      images:
+        type: choice
+        options: [all, postgres]
+        default: all
+        description: Disposable maintenance scope; never host promotion
+  pull_request:
+    paths:
+      - .github/workflows/fixture-image-maintenance.yml
+      - fixtures/dev/image-maintenance/**
+      - scripts/verify-fixture-maintenance-scan.py
+      - tests/fixture-maintenance-scan.test.py
 permissions:
   contents: read
 concurrency:
-  group: infra-dev
+  group: ${{ github.event_name == 'workflow_dispatch' && 'infra-dev' || format('fixture-maintenance-check-{0}', github.event.pull_request.number || github.ref) }}
   cancel-in-progress: false
 jobs:
   preflight:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,7 +45,7 @@ jobs:
           node scripts/github-readiness.mjs apply
   review:
     needs: preflight
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     environment: infra-apply-dev
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
@@ -55,12 +67,46 @@ jobs:
           test "$(gh api repos/Chico-IA-Empresa/Chico-Infra/git/ref/heads/main --jq .object.sha)" = "$GITHUB_SHA"
           node scripts/github-readiness.mjs apply
       - name: Native maintenance build and complete package scans
+        env:
+          CHICO_MAINTENANCE_IMAGES: ${{ inputs.images }}
         run: bash fixtures/dev/image-maintenance/review.sh
       - name: Preserve only package and synthetic build evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: fixture-image-maintenance-evidence
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/fixture-image-maintenance-evidence/
+  checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Unit and syntax boundaries
+        run: |
+          python tests/fixture-maintenance-scan.test.py
+          bash -n fixtures/dev/image-maintenance/review.sh
+      - name: Native PostgreSQL maintenance without AWS
+        env:
+          CHICO_MAINTENANCE_IMAGES: postgres
+        run: |
+          for task_key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_CREDENTIALS_RELATIVE_URI; do
+            test -z "${!task_key:-}"
+          done
+          bash fixtures/dev/image-maintenance/review.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: postgres-maintenance-native-evidence
           retention-days: 3
           if-no-files-found: warn
           path: ${{ runner.temp }}/fixture-image-maintenance-evidence/
