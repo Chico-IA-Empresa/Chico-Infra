@@ -16,7 +16,7 @@ class ScanGateTests(unittest.TestCase):
     def report(self):
         return {'SchemaVersion': 2, 'Metadata': {'OS': {'Family': 'alpine'}},
                 'Results': [{'Target': 'usr/local/bin/gosu', 'Type': 'gobinary',
-                             'Packages': [{'Name': 'stdlib', 'Version': 'v1.27.3'}]},
+                             'Packages': [{'Name': 'stdlib', 'Version': 'v1.27.3'}, {'Name': 'golang.org/x/sys', 'Version': 'v0.44.0'}]},
                             {'Class': 'os-pkgs', 'Type': 'alpine',
                              'Packages': [{'Name': 'musl', 'Version': '1.2.5-r0'}]}]}
 
@@ -36,6 +36,15 @@ class ScanGateTests(unittest.TestCase):
         report['Results'][0]['Packages'][0]['Version'] = 'v1.24.6'
         with self.assertRaises(ValueError):
             scan.verify(report, True)
+
+    def test_old_missing_or_duplicate_xsys_is_refused(self):
+        for modules in [[], [{'Name': 'golang.org/x/sys', 'Version': 'v0.1.0'}],
+                        [{'Name': 'golang.org/x/sys', 'Version': 'v0.44.0'}] * 2]:
+            report = self.report()
+            report['Results'][0]['Packages'] = report['Results'][0]['Packages'][:1] + modules
+            with self.subTest(modules=modules):
+                with self.assertRaises(ValueError):
+                    scan.verify(report, True)
 
     def test_critical_blocks_even_with_fixed_gosu(self):
         report = self.report()

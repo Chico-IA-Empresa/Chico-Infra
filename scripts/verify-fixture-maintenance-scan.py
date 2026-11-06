@@ -21,6 +21,9 @@ def verify(report, require_gosu=False, require_brotli=False):
         if len(gosu) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
                                       for p in gosu[0].get('Packages', [])):
             raise ValueError('Rebuilt gosu standard-library inventory missing')
+        modules = [p for p in gosu[0].get('Packages', []) if p.get('Name') == 'golang.org/x/sys']
+        if len(modules) != 1 or modules[0].get('Version') != 'v0.44.0':
+            raise ValueError('Maintained gosu x/sys inventory missing')
     if require_brotli:
         packages = [p for r in report['Results'] if r.get('Class') == 'os-pkgs'
                     for p in r.get('Packages', [])]

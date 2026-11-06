@@ -35,6 +35,15 @@ stage_event setup gosu-source
 curl --fail --location --retry 3 --proto '=https' --tlsv1.2 https://codeload.github.com/tianon/gosu/tar.gz/29b939aa5bd4dc588af765b8248f6e39150d2565 -o "$task_work/gosu.tar.gz"
 echo "2b70da8a5480fafedc16bb1fc91b572f064d03df736cbd91a616af2f1b66ab51  $task_work/gosu.tar.gz" | sha256sum -c -
 tar -xzf "$task_work/gosu.tar.gz" --strip-components=1 -C "$task_work/gosu"
+stage_event setup gosu-module-maintenance
+unset GOPRIVATE GONOSUMDB GONOPROXY
+(cd "$task_work/gosu" && "$task_work/go/bin/go" get golang.org/x/sys@v0.44.0)
+test "$(cd "$task_work/gosu" && "$task_work/go/bin/go" list -m -f '{{.Version}}' golang.org/x/sys)" = v0.44.0
+test "$(cd "$task_work/gosu" && "$task_work/go/bin/go" list -m -f '{{.Version}}' github.com/moby/sys/user)" = v0.4.1
+(cd "$task_work/gosu" && "$task_work/go/bin/go" mod verify) > "$task_evidence/gosu-module-verification.txt"
+(cd "$task_work/gosu" && "$task_work/go/bin/go" list -m -json all) > "$task_evidence/gosu-modules.json"
+cp "$task_work/gosu/go.mod" "$task_evidence/gosu-go.mod"
+cp "$task_work/gosu/go.sum" "$task_evidence/gosu-go.sum"
 stage_event setup gosu-build
 (cd "$task_work/gosu" && "$task_work/go/bin/go" build -mod=readonly -trimpath -ldflags '-s -w' -o "$task_work/context/gosu-arm64" .)
 "$task_work/go/bin/go" version -m "$task_work/context/gosu-arm64" > "$task_evidence/gosu-build-info.txt"
@@ -46,7 +55,12 @@ tar -xzf "$task_work/trivy.tar.gz" -C "$task_work/trivy" trivy
 "$task_work/trivy/trivy" --version > "$task_evidence/scanner-version.txt"
 : > "$task_work/empty-ignore"
 task_all_scans_passed=true
-for task_name in postgres caddy; do
+case "${CHICO_MAINTENANCE_IMAGES:-all}" in
+  postgres) task_images=(postgres) ;;
+  all) task_images=(postgres caddy) ;;
+  *) printf 'Unsupported maintenance selection\n' >&2; exit 1 ;;
+esac
+for task_name in "${task_images[@]}"; do
   task_image="chico-fixture-maintenance-$task_name:$GITHUB_SHA"
   stage_event "$task_name" build
   docker build --platform linux/arm64 --pull --no-cache -f "$task_here/$task_name.Dockerfile" -t "$task_image" "$task_work/context" > "$task_work/$task_name-build-private.log" 2>&1
@@ -54,7 +68,7 @@ for task_name in postgres caddy; do
   docker image inspect "$task_image" > "$task_evidence/$task_name-image.json"
   jq -e 'length==1 and .[0].Architecture=="arm64" and .[0].Os=="linux" and ((.[0].Config.OnBuild//[])|length==0)' "$task_evidence/$task_name-image.json" >/dev/null
   stage_event "$task_name" scan
-  "$task_work/trivy/trivy" image --image-src docker --platform linux/arm64 --scanners vuln --list-all-pkgs --ignorefile "$task_work/empty-ignore" --ignore-unfixed=false --format json --output "$task_evidence/$task_name-scan.json" "$task_image"
+  "$task_work/trivy/trivy" image --image-src docker --platform linux/arm64 --scanners vuln --db-repository ghcr.io/aquasecurity/trivy-db:2 --list-all-pkgs --ignorefile "$task_work/empty-ignore" --ignore-unfixed=false --format json --output "$task_evidence/$task_name-scan.json" "$task_image"
   stage_event "$task_name" scan-verification
   if test "$task_name" = postgres; then
     if ! python3 "$task_root/scripts/verify-fixture-maintenance-scan.py" "$task_evidence/$task_name-scan.json" --require-gosu > "$task_evidence/$task_name-scan-summary.json"; then
@@ -83,4 +97,4 @@ done
 stage_event setup completion-check
 test "$task_all_scans_passed" = true
 stage_event setup complete
-printf '{"nativeArm64":true,"scansPassed":true,"imagesPublished":false,"hostPullApproved":false,"fixtureInstalled":false}\n' > "$task_evidence/summary.json"
+printf '{"selection":"%s","nativeArm64":true,"scansPassed":true,"imagesPublished":false,"hostPullApproved":false,"fixtureInstalled":false}\n' "${CHICO_MAINTENANCE_IMAGES:-all}" > "$task_evidence/summary.json"
