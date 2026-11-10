@@ -10,7 +10,13 @@
     "reference": "operations/restore-staging/README.md; docs/restore-staging-security-review.md; https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/manage-detailed-monitoring.html",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-28",
-    "expiresAt": "2026-11-26"
+    "expiresAt": "2026-11-26",
+    "reviewedScannerAddress": {
+      "resource": "module.host[0].aws_instance.stage",
+      "version": "3.3.29",
+      "reviewedAt": "2026-11-06",
+      "reference": "PR39 private baseline/count-rendering comparison; identical source block/hash; no new risk or expiry"
+    }
   },
   {
     "scope": "restore-staging",
@@ -23,6 +29,12 @@
     "reference": "operations/restore-staging/README.md; docs/restore-staging-security-review.md; https://docs.aws.amazon.com/systems-manager/latest/userguide/troubleshooting-ssm-agent.html",
     "reviewedBy": "Codex technical review",
     "reviewedAt": "2026-10-28",
-    "expiresAt": "2026-11-26"
+    "expiresAt": "2026-11-26",
+    "reviewedScannerAddress": {
+      "resource": "module.host[0].aws_instance.stage",
+      "version": "3.3.29",
+      "reviewedAt": "2026-11-06",
+      "reference": "PR39 private baseline/count-rendering comparison; identical source block/hash; no new risk or expiry"
+    }
   }
 ]

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 
@@ -45,6 +45,28 @@ export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
       if (sourceOwners.has(sourceSignature) && sourceOwners.get(sourceSignature) !== owner) throw new Error('Source address has conflicting owners');
       sourceOwners.set(sourceSignature, owner);
       accepted.push(sourceSignature);
+    }
+    if (entry.reviewedScannerAddress !== undefined) {
+      const alias = entry.reviewedScannerAddress;
+      if (!alias || typeof alias !== 'object' || Array.isArray(alias) ||
+          Object.keys(alias).sort().join(',') !== 'reference,resource,reviewedAt,version' ||
+          entry.scope !== 'restore-staging' || !['CKV_AWS_126', 'CKV_AWS_88'].includes(entry.check) ||
+          entry.resource !== 'module.host[0].aws_instance.stage[0]' ||
+          entry.sourceFile !== 'modules/restore-staging/main.tf' || !/^[a-f0-9]{64}$/.test(entry.sourceSha256 ?? '') ||
+          entry.sourceResource !== undefined || alias.resource !== 'module.host[0].aws_instance.stage' ||
+          alias.version !== '3.3.29' || typeof alias.reference !== 'string' || !alias.reference.trim() ||
+          !Number.isFinite(Date.parse(alias.reviewedAt)) || Date.parse(alias.reviewedAt) > now.getTime()) {
+        throw new Error('Invalid reviewed staging scanner address');
+      }
+      const matching = report.results.failed_checks.filter(f => f.check_id === entry.check && f.resource === alias.resource);
+      for (const failure of matching) {
+        const file = typeof failure.file_path === 'string' ? failure.file_path.replaceAll('\\', '/') : '';
+        const source = file.startsWith('/') ? posix.normalize(posix.join('operations/restore-staging/terraform', `.${file}`)) : '';
+        if (report.summary.checkov_version !== alias.version || source !== entry.sourceFile) {
+          throw new Error('Reviewed staging scanner version or source file differs');
+        }
+      }
+      accepted.push(`${entry.check}:${alias.resource}`);
     }
     acceptedSignatures.set(signature, accepted);
     accepted.forEach(value => reviewedAddresses.add(value));

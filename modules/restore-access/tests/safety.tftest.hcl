@@ -76,3 +76,145 @@ run "reject_repository_wide_listing" {
   variables { source_list_prefixes = ["pgbackrest/sofascore-postgres/"] }
   expect_failures = [var.source_list_prefixes]
 }
+
+run "no_ecr_without_delivery_metadata" {
+  command = plan
+  variables { enabled = true }
+  assert {
+    condition = alltrue([for s in jsondecode(aws_iam_role_policy.support[0].policy).Statement :
+      alltrue([for action in try(s.Action, []) : !startswith(action, "ecr:")])
+    ])
+    error_message = "Default preparation must not grant ECR access."
+  }
+}
+run "reviewed_repository_pull_is_in_both_layers_and_lease_bound" {
+  command = plan
+  variables {
+    enabled = true
+    toolchain_delivery = {
+      repository_arn     = "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers"
+      image_digest       = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      evidence_reference = "synthetic-private-review-only"
+    }
+  }
+  assert {
+    condition = alltrue([for doc in [aws_iam_role_policy.support[0].policy, aws_iam_policy.boundary[0].policy] :
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "ReviewedToolchainRepository"]).Action == ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"] &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "ReviewedToolchainRepository"]).Resource == var.toolchain_delivery.repository_arn &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "ReviewedToolchainToken"]).Action == ["ecr:GetAuthorizationToken"] &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "ReviewedToolchainToken"]).Resource == "*" &&
+      alltrue([for s in jsondecode(doc).Statement :
+        try(s.Condition.StringEquals["aws:RequestedRegion"] == "sa-east-1" && s.Condition.DateGreaterThanEquals["aws:CurrentTime"] == var.not_before_utc && s.Condition.DateLessThan["aws:CurrentTime"] == var.expires_at_utc, false)
+        if startswith(s.Sid, "ReviewedToolchain")
+      ]) &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "NoToolchainPullBeforeLease"]).Condition.DateLessThan["aws:CurrentTime"] == var.not_before_utc &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "NoToolchainPullAfterLease"]).Condition.DateGreaterThanEquals["aws:CurrentTime"] == var.expires_at_utc &&
+      one([for s in jsondecode(doc).Statement : s if s.Sid == "NoForeignToolchainRepository"]).NotResource == var.toolchain_delivery.repository_arn &&
+      alltrue([for s in jsondecode(doc).Statement : alltrue([for action in try(s.Action, []) : !startswith(action, "ecr:") || contains(["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], action)])])
+    ])
+    error_message = "Both permission layers must bind read-only ECR access to one repository/region and both lease bounds."
+  }
+  assert {
+    condition     = length(aws_iam_policy.source_version) == 1 && length(jsondecode(aws_iam_policy.boundary[0].policy).Statement) > 0 && length(aws_iam_policy.boundary[0].policy) <= 6144
+    error_message = "Source grant partitioning and IAM boundary quota must remain valid."
+  }
+}
+run "reject_foreign_image_repository" {
+  command = plan
+  variables {
+    enabled = true
+    toolchain_delivery = {
+      repository_arn     = "arn:aws:ecr:sa-east-1:306915830875:repository/foreign"
+      image_digest       = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      evidence_reference = "synthetic-only"
+    }
+  }
+  expect_failures = [var.toolchain_delivery]
+}
+run "reject_image_tag_instead_of_digest" {
+  command = plan
+  variables {
+    enabled = true
+    toolchain_delivery = {
+      repository_arn     = "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers"
+      image_digest       = "latest"
+      evidence_reference = "synthetic-only"
+    }
+  }
+  expect_failures = [var.toolchain_delivery]
+}
+
+run "prod_export_is_scoped_and_encrypted" {
+  command = plan
+  variables {
+    enabled                 = true
+    destination_env         = "prod"
+    destination_bucket_name = "chico-prod-recovery-306915830875-sa-east-1"
+    destination_key_arn     = "arn:aws:kms:sa-east-1:306915830875:key/11111111-1111-1111-1111-111111111111"
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_role_policy.support[0].policy).Statement : s if s.Sid == "ConversionOutputOnly"]).Resource == "arn:aws:s3:::chico-prod-recovery-306915830875-sa-east-1/imports/synthetic-only/*" && length([for s in jsondecode(aws_iam_role_policy.support[0].policy).Statement : s if startswith(s.Sid, "OwnDev")]) == 0
+    error_message = "Prod output must never grant reads of Dev backups or write a Dev path."
+  }
+  assert {
+    condition = alltrue([for document in [aws_iam_policy.boundary[0].policy, aws_iam_role_policy.support[0].policy] :
+      one([for s in jsondecode(document).Statement : s if s.Sid == "EncryptOwnProdExport"]).Condition.StringEquals["kms:ViaService"] == "s3.sa-east-1.amazonaws.com" &&
+      one([for s in jsondecode(document).Statement : s if s.Sid == "EncryptOwnProdExport"]).Condition.StringEquals["kms:EncryptionContext:aws:s3:arn"] == "arn:aws:s3:::chico-prod-recovery-306915830875-sa-east-1" &&
+      one([for s in jsondecode(document).Statement : s if s.Sid == "EncryptOwnProdExport"]).Condition.DateLessThan["aws:CurrentTime"] == var.expires_at_utc
+    ])
+    error_message = "KMS access must be only through S3 for the exact Prod bucket and fixed lease in both layers."
+  }
+  assert {
+    condition     = !strcontains(aws_iam_role_policy.support[0].policy, "\"Condition\":null") && !strcontains(aws_iam_policy.boundary[0].policy, "\"Condition\":null")
+    error_message = "Do not emit null IAM condition maps by unifying heterogeneous statements."
+  }
+}
+run "prod_requires_explicit_cmk" {
+  command = plan
+  variables {
+    enabled                 = true
+    destination_env         = "prod"
+    destination_bucket_name = "chico-prod-recovery-306915830875-sa-east-1"
+  }
+  expect_failures = [var.destination_key_arn]
+}
+run "prod_rejects_dev_bucket" {
+  command = plan
+  variables {
+    enabled             = true
+    destination_env     = "prod"
+    destination_key_arn = "arn:aws:kms:sa-east-1:306915830875:key/11111111-1111-1111-1111-111111111111"
+  }
+  expect_failures = [var.destination_bucket_name]
+}
+run "dev_does_not_gain_prod_access_by_default" {
+  command = plan
+  variables { enabled = true }
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.support[0].policy).Statement : s if s.Sid == "EncryptOwnProdExport" || s.Sid == "ReadOwnVersionedExport"]) == 0
+    error_message = "The default Dev module must not gain Prod permissions."
+  }
+}
+
+run "prod_export_and_pinned_ecr_delivery_fit_boundary" {
+  command = plan
+  variables {
+    enabled                 = true
+    destination_env         = "prod"
+    destination_bucket_name = "chico-prod-recovery-306915830875-sa-east-1"
+    destination_key_arn     = "arn:aws:kms:sa-east-1:306915830875:key/11111111-1111-1111-1111-111111111111"
+    toolchain_delivery = {
+      repository_arn     = "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers"
+      image_digest       = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      evidence_reference = "synthetic-mock-only"
+    }
+  }
+  assert {
+    condition = length(aws_iam_policy.boundary[0].policy) <= 6144 && alltrue([for document in [aws_iam_policy.boundary[0].policy, aws_iam_role_policy.support[0].policy] :
+      length([for s in jsondecode(document).Statement : s if s.Sid == "EncryptOwnProdExport"]) == 1 &&
+      length([for s in jsondecode(document).Statement : s if s.Sid == "ReviewedToolchainRepository"]) == 1 &&
+      length([for s in jsondecode(document).Statement : s if startswith(s.Sid, "OwnDev")]) == 0
+    ])
+    error_message = "Combined Prod export and ECR delivery must fit the IAM boundary without regaining Dev access."
+  }
+}
