@@ -15,11 +15,11 @@ variables {
 run "uat_private_encrypted_disposable" {
   command = plan
   assert {
-    condition     = !aws_db_instance.this.publicly_accessible && aws_db_instance.this.storage_encrypted && aws_db_instance.this.skip_final_snapshot && aws_db_instance.this.backup_retention_period == 0
+    condition     = !aws_db_instance.this[0].publicly_accessible && aws_db_instance.this[0].storage_encrypted && aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 0
     error_message = "UAT deve ser privado/criptografado e descartável."
   }
   assert {
-    condition     = aws_elasticache_replication_group.this.transit_encryption_enabled && aws_elasticache_replication_group.this.at_rest_encryption_enabled && aws_elasticache_replication_group.this.transit_encryption_mode == "required"
+    condition     = aws_elasticache_replication_group.this[0].transit_encryption_enabled && aws_elasticache_replication_group.this[0].at_rest_encryption_enabled && aws_elasticache_replication_group.this[0].transit_encryption_mode == "required"
     error_message = "TLS e criptografia obrigatórios no cache."
   }
 }
@@ -35,7 +35,7 @@ run "prod_protected_baseline" {
     final_snapshot_identifier = "test-only-final"
   }
   assert {
-    condition     = aws_db_instance.this.deletion_protection && !aws_db_instance.this.skip_final_snapshot && aws_db_instance.this.backup_retention_period == 14 && aws_db_instance.this.instance_class == "db.t4g.medium" && !aws_db_instance.this.multi_az
+    condition     = aws_db_instance.this[0].deletion_protection && !aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 14 && aws_db_instance.this[0].instance_class == "db.t4g.medium" && !aws_db_instance.this[0].multi_az
     error_message = "Preservar baseline e proteção aprovados AWS-005."
   }
 }

@@ -1,3 +1,38 @@
+variable "database_name" {
+  description = "Initial database for a new instance only; null preserves existing behavior."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.database_name == null || can(regex("^[A-Za-z][A-Za-z0-9_]{0,62}$", var.database_name))
+    error_message = "Database name must be a PostgreSQL identifier with at most 63 characters."
+  }
+}
+variable "allocated_storage_gib" {
+  description = "Review recovered data, indexes, WAL and import headroom before enabling RDS."
+  type        = number
+  default     = 40
+  validation {
+    condition     = var.allocated_storage_gib >= 20 && floor(var.allocated_storage_gib) == var.allocated_storage_gib
+    error_message = "RDS gp3 allocation must be an integer of at least 20 GiB."
+  }
+}
+variable "max_allocated_storage_gib" {
+  type    = number
+  default = 200
+  validation {
+    condition     = var.max_allocated_storage_gib >= ceil(var.allocated_storage_gib * 1.1) && floor(var.max_allocated_storage_gib) == var.max_allocated_storage_gib
+    error_message = "Autoscaling maximum must be an integer at least 10 percent above allocation."
+  }
+}
+# Defaults retain the original combined module behavior; roots opt in independently.
+variable "rds_enabled" {
+  type    = bool
+  default = true
+}
+variable "cache_enabled" {
+  type    = bool
+  default = true
+}
 variable "env" {
   type = string
   validation {
@@ -6,17 +41,31 @@ variable "env" {
   }
 }
 variable "subnet_ids" { type = list(string) }
-variable "rds_sg_id" { type = string }
-variable "cache_sg_id" { type = string }
+variable "rds_sg_id" {
+  type    = string
+  default = null
+}
+variable "cache_sg_id" {
+  type    = string
+  default = null
+}
 variable "availability_zone" { type = string }
 variable "postgres_version" {
-  type = string
+  type    = string
+  default = null
   validation {
-    condition     = can(regex("^16\\.[0-9]+$", var.postgres_version))
+    condition     = !var.rds_enabled || can(regex("^16\\.[0-9]+$", var.postgres_version))
     error_message = "Escolher minor 16.x após describe-db-engine-versions em sa-east-1."
   }
 }
-variable "valkey_version" { type = string }
+variable "valkey_version" {
+  type    = string
+  default = null
+  validation {
+    condition     = !var.cache_enabled || try(length(var.valkey_version) > 0, false)
+    error_message = "Valkey habilitado exige versão revisada."
+  }
+}
 variable "data_key_arn" {
   type = string
   validation {
@@ -25,9 +74,10 @@ variable "data_key_arn" {
   }
 }
 variable "cache_user_group_ids" {
-  type = set(string)
+  type    = set(string)
+  default = []
   validation {
-    condition     = length(var.cache_user_group_ids) > 0
+    condition     = !var.cache_enabled || length(var.cache_user_group_ids) > 0
     error_message = "Grupo RBAC revisado obrigatório, com credenciais injetadas fora do state."
   }
 }
@@ -41,10 +91,12 @@ variable "final_snapshot_identifier" {
   default = null
 }
 resource "aws_db_subnet_group" "this" {
+  count      = var.rds_enabled ? 1 : 0
   name       = "chico-${var.env}"
   subnet_ids = var.subnet_ids
 }
 resource "aws_db_parameter_group" "this" {
+  count  = var.rds_enabled ? 1 : 0
   name   = "chico-${var.env}-postgres16"
   family = "postgres16"
   parameter {
@@ -66,26 +118,29 @@ resource "aws_db_parameter_group" "this" {
   }
 }
 resource "aws_cloudwatch_log_group" "postgresql" {
+  count             = var.rds_enabled ? 1 : 0
   name              = "/aws/rds/instance/chico-${var.env}/postgresql"
   retention_in_days = 30
   kms_key_id        = var.data_key_arn
 }
 resource "aws_db_instance" "this" {
+  count                                 = var.rds_enabled ? 1 : 0
   identifier                            = "chico-${var.env}"
   engine                                = "postgres"
+  db_name                               = var.database_name
   engine_version                        = var.postgres_version
   instance_class                        = var.env == "prod" ? "db.t4g.medium" : "db.t4g.small"
-  allocated_storage                     = 40
-  max_allocated_storage                 = 200
+  allocated_storage                     = var.allocated_storage_gib
+  max_allocated_storage                 = var.max_allocated_storage_gib
   storage_type                          = "gp3"
   storage_encrypted                     = true
   kms_key_id                            = var.data_key_arn
-  db_subnet_group_name                  = aws_db_subnet_group.this.name
+  db_subnet_group_name                  = aws_db_subnet_group.this[0].name
   vpc_security_group_ids                = [var.rds_sg_id]
   availability_zone                     = var.availability_zone
   publicly_accessible                   = false
   multi_az                              = false
-  parameter_group_name                  = aws_db_parameter_group.this.name
+  parameter_group_name                  = aws_db_parameter_group.this[0].name
   snapshot_identifier                   = var.env == "uat" ? var.sanitized_snapshot_arn : null
   username                              = var.env == "prod" ? "chico_owner" : null
   manage_master_user_password           = true
@@ -118,10 +173,12 @@ resource "aws_db_instance" "this" {
   }
 }
 resource "aws_elasticache_subnet_group" "this" {
+  count      = var.cache_enabled ? 1 : 0
   name       = "chico-${var.env}"
   subnet_ids = var.subnet_ids
 }
 resource "aws_elasticache_replication_group" "this" {
+  count                       = var.cache_enabled ? 1 : 0
   replication_group_id        = "chico-${var.env}"
   description                 = "Cache compartilhado de negocio ${var.env}; dados privados segregados pela aplicacao"
   engine                      = "valkey"
@@ -130,7 +187,7 @@ resource "aws_elasticache_replication_group" "this" {
   num_cache_clusters          = 1
   automatic_failover_enabled  = false
   multi_az_enabled            = false
-  subnet_group_name           = aws_elasticache_subnet_group.this.name
+  subnet_group_name           = aws_elasticache_subnet_group.this[0].name
   security_group_ids          = [var.cache_sg_id]
   preferred_cache_cluster_azs = [var.availability_zone]
   at_rest_encryption_enabled  = true
@@ -141,5 +198,38 @@ resource "aws_elasticache_replication_group" "this" {
   port                        = 6379
   apply_immediately           = false
 }
-output "postgres_address" { value = aws_db_instance.this.address }
-output "cache_address" { value = aws_elasticache_replication_group.this.primary_endpoint_address }
+output "postgres_address" { value = try(aws_db_instance.this[0].address, null) }
+output "cache_address" { value = try(aws_elasticache_replication_group.this[0].primary_endpoint_address, null) }
+
+# Preserve addresses for installations that already manage both services.
+moved {
+  from = aws_db_subnet_group.this
+  to   = aws_db_subnet_group.this[0]
+}
+moved {
+  from = aws_db_parameter_group.this
+  to   = aws_db_parameter_group.this[0]
+}
+moved {
+  from = aws_cloudwatch_log_group.postgresql
+  to   = aws_cloudwatch_log_group.postgresql[0]
+}
+moved {
+  from = aws_db_instance.this
+  to   = aws_db_instance.this[0]
+}
+moved {
+  from = aws_elasticache_subnet_group.this
+  to   = aws_elasticache_subnet_group.this[0]
+}
+moved {
+  from = aws_elasticache_replication_group.this
+  to   = aws_elasticache_replication_group.this[0]
+}
+
+output "postgres_master_secret_arn" {
+  description = "Secret reference only; never fetch its value through Terraform."
+  value       = try(aws_db_instance.this[0].master_user_secret[0].secret_arn, null)
+}
+output "postgres_subnet_group_name" { value = try(aws_db_subnet_group.this[0].name, null) }
+output "postgres_parameter_group_name" { value = try(aws_db_parameter_group.this[0].name, null) }

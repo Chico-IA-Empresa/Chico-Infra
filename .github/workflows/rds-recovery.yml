@@ -1,0 +1,82 @@
+name: RDS recovery local checks
+on:
+  pull_request:
+    paths:
+      - modules/data/**
+      - modules/rds-recovery-foundation/**
+      - modules/rds-importer/**
+      - envs/prod/**
+      - .github/workflows/rds-recovery.yml
+  push:
+    branches: [main]
+    paths:
+      - modules/data/**
+      - modules/rds-recovery-foundation/**
+      - modules/rds-importer/**
+      - envs/prod/**
+      - .github/workflows/rds-recovery.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rds-recovery-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    name: RDS recovery Terraform mocks
+    runs-on: ubuntu-latest
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+      TF_INPUT: 'false'
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - name: Validate and test without AWS credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${AWS_ACCESS_KEY_ID:-}" && test -z "${AWS_SECRET_ACCESS_KEY:-}" && test -z "${AWS_SESSION_TOKEN:-}"
+          bash -n modules/rds-importer/bootstrap.sh
+          for root in modules/data modules/rds-recovery-foundation modules/rds-importer envs/prod; do
+            terraform -chdir="$root" fmt -check -recursive
+            terraform -chdir="$root" init -backend=false -lockfile=readonly
+            terraform -chdir="$root" validate
+            terraform -chdir="$root" test
+          done
+  security:
+    name: RDS recovery security review gate
+    runs-on: ubuntu-latest
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+      PYTHONHASHSEED: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install checkov==3.3.29
+      - name: Keep new findings open until source-bound security review
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in rds-recovery-foundation rds-importer; do
+            status=0
+            checkov -d "modules/$module" --framework terraform --quiet --skip-download -o json > "$RUNNER_TEMP/checkov-$module.json" || status=$?
+            test "$status" -le 1
+          done
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          ready = True
+          for name in ('rds-recovery-foundation', 'rds-importer'):
+              report = json.loads((Path(os.environ['RUNNER_TEMP']) / f'checkov-{name}.json').read_text())
+              summary = report['summary']
+              print(json.dumps({'module': name, 'summary': summary}))
+              ready &= (summary['passed'] > 0 and summary['failed'] == 0 and summary['skipped'] == 0 and summary['parsing_errors'] == 0)
+          if not ready:
+              raise SystemExit('Security review required: no skips or new risk exceptions are authorized')
+          PY
