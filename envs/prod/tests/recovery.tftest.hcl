@@ -95,7 +95,7 @@ run "reject_importer_lease_outliving_funding_review" {
       evidence_reference         = "synthetic-test-only-never-apply"
       reviewed_on                = formatdate("YYYY-MM-DD", timeadd(timestamp(), "-24h"))
       expires_on                 = formatdate("YYYY-MM-DD", timeadd(timestamp(), "24h"))
-      all_charges_covered         = true
+      all_charges_covered        = true
       shutdown_reserve_confirmed = true
     }
     importer = {
