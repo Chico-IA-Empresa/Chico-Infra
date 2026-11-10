@@ -33,7 +33,7 @@ run "private_durable_prod_artifacts" {
       aws_s3_bucket_public_access_block.artifacts[0].block_public_policy &&
       aws_s3_bucket_public_access_block.artifacts[0].ignore_public_acls &&
       aws_s3_bucket_public_access_block.artifacts[0].restrict_public_buckets &&
-      aws_s3_bucket_versioning.artifacts[0].versioning_configuration[0].status == "Enabled")
+    aws_s3_bucket_versioning.artifacts[0].versioning_configuration[0].status == "Enabled")
     error_message = "Artifacts must stay private and versioned."
   }
   assert {
@@ -44,8 +44,8 @@ run "private_durable_prod_artifacts" {
 run "reject_dev_or_legacy_bucket" {
   command = plan
   variables {
-    storage_enabled = true
-    bucket_name     = "chico-backup"
+    storage_enabled  = true
+    bucket_name      = "chico-backup"
     external_key_arn = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111"
   }
   expect_failures = [var.bucket_name]
