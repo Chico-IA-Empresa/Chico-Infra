@@ -51,3 +51,15 @@ test('source address metadata cannot point to a different block, module, wildcar
   const conflicting = {...item,resource:'aws_cloudwatch_log_group.dev[1]',sourceFile:'envs/dev/other.tf'};
   assert.throws(()=>evaluateSecurity(report,[item,conflicting],'dev',now),/conflicting owners/);
 });
+
+
+test('RDS findings remain isolated from other scopes and fail on new findings', () => {
+  for (const scope of ['rds-recovery-foundation', 'rds-importer']) {
+    const reviewed = {...entry, scope};
+    assert.equal(evaluateSecurity(report, [reviewed], scope, now).operationalAcceptance, false);
+    assert.throws(() => evaluateSecurity(report, [entry], scope, now), /unreviewed/);
+    assert.throws(() => evaluateSecurity(report, [reviewed], 'restore-staging', now), /unreviewed/);
+    const changed = structuredClone(report); changed.results.failed_checks[0].resource += '_new';
+    assert.throws(() => evaluateSecurity(changed, [reviewed], scope, now), /unreviewed/);
+  }
+});
