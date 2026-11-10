@@ -60,6 +60,10 @@ resource "terraform_data" "recovery_readiness" {
       condition     = !var.importer_enabled || (var.importer != null && var.recovery_storage_enabled)
       error_message = "Importer requires reviewed inputs and the dedicated private Prod artifact store."
     }
+    precondition {
+      condition     = !var.importer_enabled || try(timecmp(var.importer.expires_at_utc, "${var.credit_approval.expires_on}T00:00:00Z") <= 0, false)
+      error_message = "The complete importer lease must fit inside the current funding review."
+    }
   }
 }
 resource "aws_cloudwatch_log_group" "recovery_proof" {

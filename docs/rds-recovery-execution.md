@@ -31,3 +31,8 @@ A autorização de publicação solicitada para os seis arquivos iniciais R03 n�
 A prova usa um SG próprio, sem reutilizar as regras permanentes do primário para API/workers/jobs. O grant temporário do importador para esse SG só aparece com a flag da prova. A instância restaurada declara PostgreSQL e a versão16 escolhida explicitamente.
 
 Workflow novo `.github/workflows/rds-recovery.yml`, ainda local: mocks de módulos/root e gate Checkov estrito, sem credenciais AWS/OIDC/apply. Os oito findings continuam impedindo o gate; não foi criada lista de exceções nem pedido merge. YAML e Python inline foram verificados localmente; execução GitHub ainda não ocorreu.
+
+
+## Execution approval and exact security review — 10 November 2026
+
+Felipe authorized the required reviews/publication/merges and bounded execution of this database-only goal, with existing credit-only limits, preservation and private-processing controls. This supersedes the earlier pending human decisions above, not the runtime evidence requirements. The eight findings remain visible in raw Checkov output; security/rds-recovery-exceptions.json binds each check/resource to its normalized source SHA256 and expires on 17 November UTC. The gate rejects new/obsolete findings, skips, parse errors, source changes and expired reviews. Technical gate success does not claim operational or data acceptance. Existing staging supplements and plans still require technical reconciliation before execution.

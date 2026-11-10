@@ -1,4 +1,8 @@
 mock_provider "aws" {
+  override_during = plan
+  mock_resource "aws_vpc" { defaults = { id = "vpc-synthetic" } }
+  mock_data "aws_ami" { defaults = { architecture = "x86_64", state = "available", name = "al2023-ami-synthetic", product_codes = [] } }
+  mock_data "aws_subnet" { defaults = { vpc_id = "vpc-synthetic" } }
   mock_resource "aws_kms_key" {
     defaults = {
       arn    = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111"
@@ -74,4 +78,39 @@ run "reject_unvalidated_snapshot_source" {
     validated_snapshot_arn = "arn:aws:rds:sa-east-1:123456789012:snapshot:unknown-source"
   }
   expect_failures = [var.validated_snapshot_arn]
+}
+run "reject_importer_lease_outliving_funding_review" {
+  command = plan
+  variables {
+    provision_enabled         = true
+    rds_enabled               = true
+    cache_enabled             = false
+    managed_data_key_enabled  = true
+    recovery_storage_enabled  = true
+    importer_enabled          = true
+    postgres_version          = "16.15"
+    final_snapshot_identifier = "synthetic-prod-final"
+    credit_approval = {
+      account_id                 = "123456789012"
+      evidence_reference         = "synthetic-test-only-never-apply"
+      reviewed_on                = formatdate("YYYY-MM-DD", timeadd(timestamp(), "-24h"))
+      expires_on                 = formatdate("YYYY-MM-DD", timeadd(timestamp(), "24h"))
+      all_charges_covered         = true
+      shutdown_reserve_confirmed = true
+    }
+    importer = {
+      ami_id           = "ami-synthetic"
+      not_before_utc   = timeadd(timestamp(), "-1h")
+      expires_at_utc   = timeadd(timestamp(), "46h")
+      volume_gib       = 80
+      toolchain_digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      dump = {
+        bucket     = "chico-prod-recovery-123456789012-sa-east-1"
+        key        = "imports/synthetic-test/database.dump"
+        version_id = "synthetic-version"
+        sha256     = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    }
+  }
+  expect_failures = [terraform_data.recovery_readiness]
 }
