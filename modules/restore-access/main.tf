@@ -40,11 +40,28 @@ variable "source_version_policy_documents" {
     error_message = "Até nove policies de 6000 caracteres, somente GetObjectVersion com cada key/VersionId exatos. Sem GetObject, wildcards, grants extras ou NotAction."
   }
 }
+variable "destination_env" {
+  description = "Dev compatibility by default; Prod is a separately reviewed RDS export."
+  type        = string
+  default     = "dev"
+  validation {
+    condition     = contains(["dev", "prod"], var.destination_env)
+    error_message = "Destination must be explicitly Dev or Prod."
+  }
+}
+variable "destination_key_arn" {
+  type    = string
+  default = null
+  validation {
+    condition     = !var.enabled || var.destination_env != "prod" || can(regex("^arn:aws:kms:sa-east-1:${var.account_id}:key/[a-zA-Z0-9-]+$", var.destination_key_arn))
+    error_message = "Prod export requires the explicit target account/region CMK."
+  }
+}
 variable "destination_bucket_name" {
   type = string
   validation {
-    condition     = can(regex("^chico-dev-[a-z0-9-]{3,50}$", var.destination_bucket_name)) && var.destination_bucket_name != "chico-backup"
-    error_message = "Destino deve ser o bucket Dev próprio reconciliado."
+    condition     = var.destination_env == "prod" ? var.destination_bucket_name == "chico-prod-recovery-${var.account_id}-sa-east-1" : (can(regex("^chico-dev-[a-z0-9-]{3,50}$", var.destination_bucket_name)) && var.destination_bucket_name != "chico-backup")
+    error_message = "Destination must match its explicit environment; never adopt the legacy bucket."
   }
 }
 variable "import_id" {
@@ -62,7 +79,36 @@ variable "expires_at_utc" {
     error_message = "Janela UTC explícita, positiva e de no máximo 48h; renovação exige outro lote revisado."
   }
 }
+variable "toolchain_delivery" {
+  description = "Optional private image-delivery review metadata. No grant unless explicitly supplied; does not approve image use or data handling."
+  type        = object({ repository_arn = string, image_digest = string, evidence_reference = string })
+  default     = null
+  validation {
+    condition = var.toolchain_delivery == null || try(
+      var.toolchain_delivery.repository_arn == "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers" &&
+      can(regex("^sha256:[a-f0-9]{64}$", var.toolchain_delivery.image_digest)) &&
+      length(trimspace(var.toolchain_delivery.evidence_reference)) > 0 &&
+      length(var.toolchain_delivery.evidence_reference) <= 200 &&
+    !can(regex("[\\r\\n]", var.toolchain_delivery.evidence_reference)), false)
+    error_message = "Only reviewed chico-workers digest/evidence metadata is accepted; no tag, foreign repository or empty reference."
+  }
+}
 locals {
+  toolchain_repository = "arn:aws:ecr:sa-east-1:306915830875:repository/chico-workers"
+  toolchain_lease_condition = {
+    StringEquals          = { "aws:RequestedRegion" = "sa-east-1" }
+    DateGreaterThanEquals = { "aws:CurrentTime" = var.not_before_utc }
+    DateLessThan          = { "aws:CurrentTime" = var.expires_at_utc }
+  }
+  toolchain_pull_statements = [for statement in [
+    { Sid = "ReviewedToolchainToken", Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*", Condition = local.toolchain_lease_condition },
+    { Sid = "ReviewedToolchainRepository", Effect = "Allow", Action = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = local.toolchain_repository, Condition = local.toolchain_lease_condition }
+  ] : statement if var.toolchain_delivery != null]
+  toolchain_pull_guards = [for statement in [
+    { Sid = "NoToolchainPullBeforeLease", Effect = "Deny", Action = ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = "*", Condition = { DateLessThan = { "aws:CurrentTime" = var.not_before_utc } } },
+    { Sid = "NoToolchainPullAfterLease", Effect = "Deny", Action = ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = "*", Condition = { DateGreaterThanEquals = { "aws:CurrentTime" = var.expires_at_utc } } },
+    { Sid = "NoForeignToolchainRepository", Effect = "Deny", Action = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], NotResource = local.toolchain_repository }
+  ] : statement if var.toolchain_delivery != null]
   source_bucket = "arn:aws:s3:::chico-backup"
   destination   = "arn:aws:s3:::${var.destination_bucket_name}"
   region        = { StringEquals = { "aws:RequestedRegion" = "sa-east-1" } }
@@ -70,7 +116,29 @@ locals {
     "ssm:DescribeAssociation", "ssm:GetDeployablePatchSnapshotForInstance", "ssm:GetDocument", "ssm:DescribeDocument", "ssm:GetManifest", "ssm:ListAssociations", "ssm:ListInstanceAssociations", "ssm:PutInventory", "ssm:PutComplianceItems", "ssm:PutConfigurePackageResult", "ssm:UpdateAssociationStatus", "ssm:UpdateInstanceAssociationStatus", "ssm:UpdateInstanceInformation",
     "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel", "ec2messages:AcknowledgeMessage", "ec2messages:DeleteMessage", "ec2messages:FailMessage", "ec2messages:GetEndpoint", "ec2messages:GetMessages", "ec2messages:SendReply"
   ]
-  support_statements = [
+  conversion_prefix = var.destination_env == "prod" ? "imports/${var.import_id}" : "dev/database/import/${var.import_id}"
+  dev_backup_reads = [for statement in [
+    { Sid = "OwnDevBackupListing", Effect = "Allow", Action = ["s3:ListBucket"], Resource = local.destination, Condition = { StringLike = { "s3:prefix" = ["dev/database/", "dev/database/*"] } } },
+    { Sid = "OwnDevBackupReads", Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = "${local.destination}/dev/database/*" }
+  ] : statement if var.destination_env == "dev"]
+  prod_export_support = [for statement in [
+    {
+      Sid = "ReadOwnVersionedExport", Effect = "Allow", Action = ["s3:GetObjectVersion"], Resource = "${local.destination}/${local.conversion_prefix}/*"
+    },
+    {
+      Sid = "EncryptOwnProdExport", Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.destination_key_arn,
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion"              = "sa-east-1"
+          "kms:ViaService"                   = "s3.sa-east-1.amazonaws.com"
+          "kms:EncryptionContext:aws:s3:arn" = local.destination
+        }
+        DateGreaterThanEquals = { "aws:CurrentTime" = var.not_before_utc }
+        DateLessThan          = { "aws:CurrentTime" = var.expires_at_utc }
+      }
+    }
+  ] : statement if var.destination_env == "prod"]
+  support_statements = concat([
     { Sid = "AgentCore", Effect = "Allow", Action = local.agent_actions, Resource = "*", Condition = local.region },
     { Sid = "SessionLogs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"], Resource = "arn:aws:logs:sa-east-1:${var.account_id}:log-group:/chico/dev/ssm:*", Condition = local.region },
     # Run Command's agent discovers the pre-existing output group. This action
@@ -78,16 +146,14 @@ locals {
     { Sid = "SessionLogGroupDiscovery", Effect = "Allow", Action = ["logs:DescribeLogGroups"], Resource = "*", Condition = local.region },
     { Sid = "SourceLocation", Effect = "Allow", Action = ["s3:GetBucketLocation"], Resource = local.source_bucket },
     { Sid = "SelectedSourceListing", Effect = "Allow", Action = ["s3:ListBucket"], Resource = local.source_bucket, Condition = { StringEquals = { "s3:prefix" = var.source_list_prefixes } } },
-    { Sid = "OwnDevBackupListing", Effect = "Allow", Action = ["s3:ListBucket"], Resource = local.destination, Condition = { StringLike = { "s3:prefix" = ["dev/database/", "dev/database/*"] } } },
-    { Sid = "OwnDevBackupReads", Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = "${local.destination}/dev/database/*" },
-    { Sid = "ConversionOutputOnly", Effect = "Allow", Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"], Resource = "${local.destination}/dev/database/import/${var.import_id}/*" }
-  ]
-  guard_statements = [
+    { Sid = "ConversionOutputOnly", Effect = "Allow", Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"], Resource = "${local.destination}/${local.conversion_prefix}/*" }
+  ], local.dev_backup_reads, local.prod_export_support, local.toolchain_pull_statements)
+  guard_statements = concat([
     { Sid = "NeverChangeLegacySource", Effect = "Deny", NotAction = ["s3:ListBucket", "s3:GetBucketLocation", "s3:GetObjectVersion"], Resource = [local.source_bucket, "${local.source_bucket}/*"] },
     { Sid = "NoDataAccessBeforeLease", Effect = "Deny", Action = ["s3:*"], Resource = [local.source_bucket, "${local.source_bucket}/*", local.destination, "${local.destination}/*"], Condition = { DateLessThan = { "aws:CurrentTime" = var.not_before_utc } } },
     { Sid = "NoDataAccessAfterLease", Effect = "Deny", Action = ["s3:*"], Resource = [local.source_bucket, "${local.source_bucket}/*", local.destination, "${local.destination}/*"], Condition = { DateGreaterThanEquals = { "aws:CurrentTime" = var.expires_at_utc } } },
     { Sid = "RequireTLS", Effect = "Deny", Action = ["s3:*"], Resource = [local.source_bucket, "${local.source_bucket}/*", local.destination, "${local.destination}/*"], Condition = { Bool = { "aws:SecureTransport" = "false" } } }
-  ]
+  ], local.toolchain_pull_guards)
 }
 resource "aws_iam_policy" "boundary" {
   count = var.enabled ? 1 : 0
@@ -143,6 +209,6 @@ output "access" {
   value = var.enabled ? {
     role_arn       = aws_iam_role.restore[0].arn, instance_profile_name = aws_iam_instance_profile.restore[0].name,
     boundary_arn   = aws_iam_policy.boundary[0].arn, source_manifest_sha256 = var.source_manifest_sha256,
-    not_before_utc = var.not_before_utc, expires_at_utc = var.expires_at_utc
+    not_before_utc = var.not_before_utc, expires_at_utc = var.expires_at_utc, toolchain_delivery = var.toolchain_delivery
   } : null
 }

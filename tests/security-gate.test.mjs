@@ -63,3 +63,33 @@ test('RDS findings remain isolated from other scopes and fail on new findings', 
     assert.throws(() => evaluateSecurity(changed, [reviewed], scope, now), /unreviewed/);
   }
 });
+const scannerNow = new Date('2026-11-06T14:00:00Z');
+const scannerEntry = {...entry, scope:'restore-staging', check:'CKV_AWS_126', resource:'module.host[0].aws_instance.stage[0]', sourceFile:'modules/restore-staging/main.tf', sourceSha256:'a'.repeat(64), reviewedScannerAddress:{resource:'module.host[0].aws_instance.stage', version:'3.3.29', reviewedAt:'2026-11-06', reference:'synthetic exact-address review'}};
+const scannerReport = {summary:{passed:1,failed:1,parsing_errors:0,skipped:0,checkov_version:'3.3.29'},results:{failed_checks:[{check_id:'CKV_AWS_126',resource:'module.host[0].aws_instance.stage',file_path:'/../../../modules/restore-staging/main.tf'}]}};
+test('reviewed staging scanner address preserves raw finding and source ownership on both platforms', () => {
+  for (const file of ['/../../../modules/restore-staging/main.tf', '\\..\\..\\..\\modules\\restore-staging\\main.tf']) {
+    const r=structuredClone(scannerReport);r.results.failed_checks[0].file_path=file;
+    const result=evaluateSecurity(r,[scannerEntry],'restore-staging',scannerNow);
+    assert.equal(result.rawFindings,1);assert.equal(result.reviewedExceptions,1);assert.equal(result.skipped,0);assert.equal(result.operationalAcceptance,false);
+  }
+  const canonical=structuredClone(scannerReport);canonical.results.failed_checks[0].resource=scannerEntry.resource;
+  assert.equal(evaluateSecurity(canonical,[scannerEntry],'restore-staging',scannerNow).rawFindings,1);
+});
+test('scanner address does not accept another instance module check scope or wildcard', () => {
+  for(const change of [{resource:'module.host[1].aws_instance.stage[0]'},{scope:'dev'},{check:'CKV_NEW'},{sourceFile:'modules/foreign/main.tf'},{sourceSha256:'missing'},{reviewedScannerAddress:{...scannerEntry.reviewedScannerAddress,resource:'module.host[*].aws_instance.stage'}},{reviewedScannerAddress:{...scannerEntry.reviewedScannerAddress,version:'other'}},{reviewedScannerAddress:{...scannerEntry.reviewedScannerAddress,reviewedAt:'2026-11-07'}},{reviewedScannerAddress:{...scannerEntry.reviewedScannerAddress,reference:''}}]) {
+    assert.throws(()=>evaluateSecurity(scannerReport,[{...scannerEntry,...change}],'restore-staging',scannerNow));
+  }
+  const sibling=structuredClone(scannerReport);sibling.results.failed_checks[0].resource='module.host[1].aws_instance.stage';
+  assert.throws(()=>evaluateSecurity(sibling,[scannerEntry],'restore-staging',scannerNow),/unreviewed/);
+});
+test('staging alias requires exact scanner version source file and complete reports', () => {
+  for(const change of [r=>{r.summary.checkov_version='3.3.30';},r=>{delete r.summary.checkov_version;},r=>{r.results.failed_checks[0].file_path='/../../../modules/foreign/main.tf';},r=>{delete r.results.failed_checks[0].file_path;},r=>{r.summary.skipped=1;},r=>{r.summary.parsing_errors=1;}]) {
+    const r=structuredClone(scannerReport);change(r);assert.throws(()=>evaluateSecurity(r,[scannerEntry],'restore-staging',scannerNow));
+  }
+});
+test('address alias cannot hide an additional or obsolete finding', () => {
+  const extra=structuredClone(scannerReport);extra.results.failed_checks.push({...extra.results.failed_checks[0],check_id:'NEW'});extra.summary.failed=2;
+  assert.throws(()=>evaluateSecurity(extra,[scannerEntry],'restore-staging',scannerNow),/unreviewed/);
+  const missing=structuredClone(scannerReport);missing.results.failed_checks=[];missing.summary.failed=0;
+  assert.throws(()=>evaluateSecurity(missing,[scannerEntry],'restore-staging',scannerNow),/obsolete/);
+});
