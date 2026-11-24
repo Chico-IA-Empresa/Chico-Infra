@@ -20,7 +20,7 @@ Role sanitizadora isolada é a ponte controlada. Chave exclusiva para snapshot t
 
 Módulo data prepara RDS PostgreSQL16 privado, master gerenciado, force_ssl, pg_stat_statements e log de queries lentas; Valkey micro privado com TLS obrigatório/at-rest e grupo RBAC obrigatório. Minor PostgreSQL, versão Valkey, chave KMS e grupos vêm de descoberta/revisão real da conta; não inventados. Baseline Single-AZ aprovado preservado. Host workers deve usar primeira AZ, a mesma do RDS. Multi-AZ continua proposta separada com custo coberto.
 
-Prod: t4g.medium, gp3 40→200GiB, PITR14, deletion protection e identificador obrigatório de snapshot final. UAT: t4g.small, restaurar somente snapshot sanitizado aprovado, sem backup automático/final. Separar chave Prod de chave sanitizada, secrets e identidades SQL api/workers/migrator. Budget de conexões deve medir duas cores, oito jobs, LISTEN, sanitização e migração com clientes A/B contra um backend comum; não tomar 300 conexões do alarme histórico como capacidade disponível.
+Prod: t4g.medium, gp3 40→200GiB, PITR14, deletion protection e identificador obrigatório de snapshot final. UAT: t4g.small, restaurar somente snapshot sanitizado aprovado, sem backup automático/final. Separar chave Prod de chave sanitizada, secrets e identidades SQL api/workers/migrator. Budget de conexões deve medir duas cores, dez jobs (no máximo um SofaScore por vez, pela trava), LISTEN, sanitização e migração com clientes A/B contra um backend comum; não tomar 300 conexões do alarme histórico como capacidade disponível.
 
 Monitoramento preparado: Database Insights standard explícito, Performance Insights habilitado somente Prod com retenção7 e CMK; logs PostgreSQL em grupo KMS com retenção30. Compatibilidade de classe/versão/região e custo continuam exigindo descoberta e cotação reais. Referência: [RDS Standard mode](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_DatabaseInsights.TurningOnStandard.html). Não habilita modo Advanced.
 
@@ -36,18 +36,20 @@ AWS-003 precisa fechar tráfego REST/WS/SSE/cookies/forwarded IP e aliases antig
 
 ECS EC2 ARM/bridge em ASG/capacity provider, mesmo AZ RDS. Host SSM/IMDSv2, SG workers, sem SSH. Três serviços 100/200, candidato saudável aguardando lock e SIGTERM≤120s; aplicação precisa AWS-018/019/020. Não adicionar quarto worker live BSD, financeiros ou Pix probe. Deixar consumidores desativados em Prod até corte específico.
 
-| Job | Comando direto esperado (sem shell loop UAT/Prod) | Cadência PRD |
+| Job | Comando direto esperado (sem shell loop UAT/Prod) | Cadência (cron, America/Sao_Paulo) |
 |---|---|---|
-| match-list | python workers/sofascore_match_list_worker.py | rate(30 minutes) |
-| lineups | python workers/sofascore_lineups_worker.py | rate(20 minutes) |
-| post-match-stats | python workers/sofascore_post_match_statistics_worker.py | rate(15 minutes) |
-| standings | python workers/sofascore_standings_worker.py | rate(12 hours) |
-| team-stats | python workers/sofascore_team_statistics_worker.py | rate(12 hours) |
-| round-matches | python workers/sofascore_round_matches_worker.py | rate(1 day) |
-| league-reports | python workers/worker_league_reports.py --run-once (depende AWS-018) | ~12h; divergência 06h BRT atual precisa fechamento |
-| match-analysis | python workers/worker_match_analysis.py --run-once | rate(12 hours) |
+| post-match-stats | python workers/sofascore_post_match_statistics_worker.py | a cada 15 min: :00 :15 :30 :45 |
+| lineups | python workers/sofascore_lineups_worker.py | a cada 20 min: :07 :27 :47 |
+| match-list | python workers/sofascore_match_list_worker.py | a cada 30 min: :21 :51 |
+| standings | python workers/sofascore_standings_worker.py | 03:38 e 15:38 |
+| team-stats | python workers/sofascore_team_statistics_worker.py | 04:38 e 16:38 |
+| round-matches | python workers/sofascore_round_matches_worker.py | 05:03 |
+| match-analysis | python workers/worker_match_analysis.py --run-once | 05:00 e 17:00 |
+| league-reports | python workers/worker_league_reports.py --run-once (depende AWS-018) | 06:00 — mesmo horário do laço da VPS; mudar é decisão de produto (W4) |
+| odds-history-purge | python workers/worker_odds_history_purge.py --max-runtime-seconds 900 (depende AWS-020) | 03:20 |
+| account-deletions | python scripts/process_account_deletions.py (ENT-02; ainda sem trava/JOB_RESULT) | de hora em hora, minuto 12 |
 
-Timezone Scheduler explícito UTC; rates não exigem hora civil. Task definition ARN com revisão fixa e imagem por digest, Fargate ARM awsvpc IP público + SG jobs. Retry de invocação limitado e PassRole só das roles alvo, observando task ARN/exit/heartbeat separado. Não ativar schedules antes de locks e one-shot comprovados. Não gerar comando com flag não suportada como se estivesse testado.
+Timezone Scheduler explícito America/Sao_Paulo (sem horário de verão desde 2019). Cron em vez de rate: os seis SofaScore disputam a mesma trava (`sofascore:production_worker`, espera de 120 s), e com rate() caíam na mesma marca, pulando uns aos outros e somando o pico de conexões; os minutos acima os separam. Invocação que o Scheduler não consegue entregar depois do retry vai para a DLQ `chico-<env>-scheduler-dlq` (SQS cifrada, 14 dias), com alarme `chico-<env>-scheduler-dlq-not-empty`; falha dentro da task (exit != 0) não passa pela DLQ e é lida por JOB_RESULT/heartbeat e pelo evento de task parada do ECS. Task definition ARN com revisão fixa e imagem por digest, Fargate ARM awsvpc IP público + SG jobs. Retry de invocação limitado e PassRole só das roles alvo, observando task ARN/exit/heartbeat separado. Não ativar schedules antes de locks e one-shot comprovados. Não gerar comando com flag não suportada como se estivesse testado.
 
 ## UAT teardown e produção preparada
 
