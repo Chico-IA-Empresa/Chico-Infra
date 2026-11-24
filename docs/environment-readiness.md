@@ -34,7 +34,7 @@ AWS-003 precisa fechar tráfego REST/WS/SSE/cookies/forwarded IP e aliases antig
 
 ## Workers e schedules
 
-ECS EC2 ARM/bridge em ASG/capacity provider, mesmo AZ RDS. Host SSM/IMDSv2, SG workers, sem SSH. Três serviços 100/200, candidato saudável aguardando lock e SIGTERM≤120s; aplicação precisa AWS-018/019/020. Não adicionar quarto worker live BSD, financeiros ou Pix probe. Deixar consumidores desativados em Prod até corte específico.
+ECS EC2 ARM/bridge em ASG/capacity provider, mesmo AZ RDS. Host SSM/IMDSv2, SG workers, sem SSH. Três serviços 100/200, candidato saudável aguardando lock e SIGTERM≤120s; o lado da aplicação (AWS-018/019/020/022/023) está na `main` do Chico-Back desde 2026-11-24 (#274, #275, #293, #295, #296), ainda sem prova em ambiente real. AWS-021 (Chico-Back #294: worker habilitado com configuração inválida sai com 2, inclusive SofaScore sem `RAPIDAPI_KEY`) segue aberto. Não adicionar quarto worker live BSD, financeiros ou Pix probe. Deixar consumidores desativados em Prod até corte específico.
 
 | Job | Comando direto esperado (sem shell loop UAT/Prod) | Cadência (cron, America/Sao_Paulo) |
 |---|---|---|
@@ -45,11 +45,15 @@ ECS EC2 ARM/bridge em ASG/capacity provider, mesmo AZ RDS. Host SSM/IMDSv2, SG w
 | team-stats | python workers/sofascore_team_statistics_worker.py | 04:38 e 16:38 |
 | round-matches | python workers/sofascore_round_matches_worker.py | 05:03 |
 | match-analysis | python workers/worker_match_analysis.py --run-once | 05:00 e 17:00 |
-| league-reports | python workers/worker_league_reports.py --run-once (depende AWS-018) | 06:00 — mesmo horário do laço da VPS; mudar é decisão de produto (W4) |
-| odds-history-purge | python workers/worker_odds_history_purge.py --max-runtime-seconds 900 (depende AWS-020) | 03:20 |
-| account-deletions | python scripts/process_account_deletions.py (ENT-02; ainda sem trava/JOB_RESULT) | de hora em hora, minuto 12 |
+| league-reports | python workers/worker_league_reports.py --run-once | 06:00 — mesmo horário do laço da VPS; mudar é decisão de produto (W4) |
+| odds-history-purge | python workers/worker_odds_history_purge.py --max-runtime-seconds 900 | 03:20 |
+| account-deletions | python scripts/process_account_deletions.py --max-runtime-seconds 600 (ENT-02; one-shot desde AWS-022) | de hora em hora, minuto 12 |
 
 Timezone Scheduler explícito America/Sao_Paulo (sem horário de verão desde 2019). Cron em vez de rate: os seis SofaScore disputam a mesma trava (`sofascore:production_worker`, espera de 120 s), e com rate() caíam na mesma marca, pulando uns aos outros e somando o pico de conexões; os minutos acima os separam. Invocação que o Scheduler não consegue entregar depois do retry vai para a DLQ `chico-<env>-scheduler-dlq` (SQS cifrada, 14 dias), com alarme `chico-<env>-scheduler-dlq-not-empty`; falha dentro da task (exit != 0) não passa pela DLQ e é lida por JOB_RESULT/heartbeat e pelo evento de task parada do ECS. Task definition ARN com revisão fixa e imagem por digest, Fargate ARM awsvpc IP público + SG jobs. Retry de invocação limitado e PassRole só das roles alvo, observando task ARN/exit/heartbeat separado. Não ativar schedules antes de locks e one-shot comprovados. Não gerar comando com flag não suportada como se estivesse testado.
+
+Contrato de saída comum aos dez jobs (`workers/one_shot.py` no Chico-Back), para as regras de alarme: `0` concluído, parcial (`status: partial`, o próximo disparo retoma) ou pulado (outra execução tem a trava); `1` falha (provedor 100% fora, trava perdida, todos os itens falharam); `2` configuração ausente ou inválida; `3` `--max-runtime-seconds` estourado; `143` SIGTERM. Cada execução imprime uma linha `JOB_RESULT {...}` com `execution_id`, que no ECS é o `TaskARN` lido do endpoint de metadados v4 (`ECS_CONTAINER_METADATA_URI_V4`); a task definition não precisa definir variável para isso. Travas: `sofascore:production_worker` (os seis SofaScore), `jobs:league_reports`, `jobs:match_analysis`, `jobs:odds_history_purge`, `jobs:account_deletions`.
+
+Pool do engine dos workers por variável (`WORKER_DB_POOL_SIZE`/`WORKER_DB_MAX_OVERFLOW`, defaults 2 + 2), mais uma conexão dedicada por processo para a trava de job ou de líder; entra no budget de conexões acima. Há um 11º job no Chico-Back ainda sem schedule aqui: `worker_data_freshness.py` (alerta de dado velho por domínio, só leitura, trava `jobs:data_freshness`, limites em `DATA_FRESHNESS_MAX_AGE`; na VPS roda a cada 15 min).
 
 ## UAT teardown e produção preparada
 
