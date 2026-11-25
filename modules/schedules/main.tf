@@ -43,6 +43,8 @@ variable "alarm_topic_arns" {
 #   league-reports 06:00, o mesmo horário do laço da VPS hoje (decisão W4)
 #   odds-history-purge 03:20, menor tráfego (AWS-020)
 #   account-deletions de hora em hora no minuto 12 (ENT-02)
+#   data-freshness :04 :19 :34 :49 — só leitura, trava própria, fora das
+#   marcas SofaScore para não medir no meio de uma escrita (AWS-023)
 locals {
   timezone = "America/Sao_Paulo"
   cadence = {
@@ -56,6 +58,7 @@ locals {
     league-reports     = "cron(0 6 * * ? *)"
     odds-history-purge = "cron(20 3 * * ? *)"
     account-deletions  = "cron(12 * * * ? *)"
+    data-freshness     = "cron(4/15 * * * ? *)"
   }
   # O envio para a DLQ é feito com o papel de execução do Scheduler, então a
   # permissão vai no papel de `target_role_arn` (nome = último segmento do ARN).
