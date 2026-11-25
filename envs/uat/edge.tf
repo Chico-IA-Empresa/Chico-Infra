@@ -27,11 +27,12 @@ variable "edge_waf_mode" {
   default = "count"
 }
 variable "edge_logs_key_arn" {
-  type    = string
-  default = null
+  description = "Null usa a CMK de logs de UAT (foundation.tf) quando ela existe."
+  type        = string
+  default     = null
 }
 variable "edge_alb_arn" {
-  description = "ARN do ALB de UAT, criado pela API-01. Null mantém o WAF desassociado."
+  description = "ARN do ALB de UAT. Null usa o ALB do api.tf quando ele existe; a associação continua exigindo edge_association_approved."
   type        = string
   default     = null
 }
@@ -50,8 +51,8 @@ module "edge" {
   dns_change_approved  = var.edge_dns_change_approved
   waf_enabled          = var.edge_waf_enabled
   waf_mode             = var.edge_waf_mode
-  logs_key_arn         = var.edge_logs_key_arn
-  alb_arn              = var.edge_alb_arn
+  logs_key_arn         = var.edge_logs_key_arn != null ? var.edge_logs_key_arn : local.uat_logs_key_arn
+  alb_arn              = var.edge_alb_arn != null ? var.edge_alb_arn : try(module.alb[0].alb_arn, null)
   association_approved = var.edge_association_approved
   depends_on           = [module.funding]
 }
