@@ -59,7 +59,7 @@ run "explicit_list_wins" {
     workers_secret_arns = ["arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/uat/workers/OTHER-QwErTy"]
   }
   assert {
-    condition     = local.workers_secret_arns == ["arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/uat/workers/OTHER-QwErTy"]
+    condition     = local.workers_secret_arns == tolist(["arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/uat/workers/OTHER-QwErTy"])
     error_message = "workers_secret_arns preenchida vence a derivação."
   }
 }
