@@ -129,7 +129,7 @@ run "job_failures_reach_the_alarms" {
   }
   assert {
     condition     = strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "LEADER_EVENT") && strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "config_error")
-    error_message = "Worker contínuo que recusa subir (AWS-021) também alarma."
+    error_message = "Worker contínuo que recusa subir (WORK-01a) também alarma."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.signal["job-error"].threshold == 1 && aws_cloudwatch_metric_alarm.signal["job-error"].period == 300 && aws_cloudwatch_metric_alarm.signal["job-partial"].threshold == 6 && aws_cloudwatch_metric_alarm.signal["job-partial"].period == 3600
