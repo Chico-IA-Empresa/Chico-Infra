@@ -57,6 +57,10 @@ run "host_is_arm64_imdsv2_encrypted_in_one_az" {
     error_message = "EBS cifrado e sem CPU Unlimited não aprovado."
   }
   assert {
+    condition     = aws_launch_template.host.network_interfaces[0].associate_public_ip_address == "true" && contains(aws_launch_template.host.network_interfaces[0].security_groups, "sg-workers")
+    error_message = "Sem NAT na rede, o host precisa de IP público para registrar no ECS e baixar imagem; o SG workers vai na interface."
+  }
+  assert {
     condition     = aws_autoscaling_group.host.min_size == 0 && aws_autoscaling_group.host.max_size == 2 && length(aws_autoscaling_group.host.vpc_zone_identifier) == 1
     error_message = "ASG começa vazio, teto revisado e uma subnet só (mesma AZ do RDS)."
   }

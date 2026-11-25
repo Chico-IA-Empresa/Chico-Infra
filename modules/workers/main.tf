@@ -156,7 +156,14 @@ resource "aws_launch_template" "host" {
   iam_instance_profile {
     arn = var.instance_profile_arn
   }
-  vpc_security_group_ids = [var.host_security_group_id]
+  # A rede de UAT/Prod não tem NAT (modules/network): compute fica na subnet
+  # pública com egress 0.0.0.0/0 e precisa de IP público para alcançar ECR,
+  # ECS e SSM. Sem ingress no SG `workers`, o IP não abre porta nenhuma.
+  network_interfaces {
+    associate_public_ip_address = true
+    delete_on_termination       = true
+    security_groups             = [var.host_security_group_id]
+  }
   credit_specification {
     cpu_credits = "standard"
   }
