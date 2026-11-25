@@ -56,7 +56,7 @@ module "workers_iam" {
   env             = "uat"
   account_id      = var.account_id
   secret_arns     = var.workers_secret_arns
-  secrets_key_arn = var.secrets_key_arn
+  secrets_key_arn = local.uat_secrets_key_arn
   depends_on      = [module.funding]
 }
 
@@ -73,8 +73,8 @@ module "workers" {
   task_role_arns         = module.workers_iam[0].task_role_arns
   secrets                = var.workers_secrets
   environment            = var.workers_environment
-  logs_key_arn           = var.workers_logs_key_arn
-  alarm_topic_arns       = var.workers_alarm_topic_arns
+  logs_key_arn           = var.workers_logs_key_arn != null ? var.workers_logs_key_arn : local.uat_logs_key_arn
+  alarm_topic_arns       = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)
   # Os ARNs dos papéis são montados pelo nome no workers-iam: sem isto o
   # Terraform não sabe que o launch template e as task definitions esperam
   # os papéis existirem.
@@ -90,7 +90,7 @@ module "schedules" {
   public_subnet_ids    = toset(module.network[0].public_subnet_ids)
   jobs_sg_id           = module.network[0].security_group_ids["jobs"]
   task_definition_arns = module.workers[0].job_task_definition_arns
-  alarm_topic_arns     = var.workers_alarm_topic_arns
+  alarm_topic_arns     = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)
   depends_on           = [module.funding, module.workers_iam]
 }
 

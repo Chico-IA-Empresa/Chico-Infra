@@ -17,6 +17,7 @@ alert_emails                            = []    # private confirmed destination,
 budget_limits                           = {}    # complete account/shared/dev/uat/prod from covered quote
 dev_ci_policy_documents                 = null  # generated only after real metadata reconciliation
 dev_proof_ci                            = null  # separate reviewed Shared wave; exact Dev instance and review reference
+backend_release_ci                      = null  # Chico-Back image publish; needs ci-build-backend-dev binding below
 activate_environment_cost_tag           = false # enable only after real env tag is visible in Cost Explorer
 environment_cost_tag_evidence_reference = null
 oidc_bindings = {
