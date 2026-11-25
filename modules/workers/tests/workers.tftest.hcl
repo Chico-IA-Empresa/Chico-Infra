@@ -121,3 +121,43 @@ run "reject_wrong_ami" {
   }
   expect_failures = [aws_launch_template.host]
 }
+run "job_failures_reach_the_alarms" {
+  command = plan
+  assert {
+    condition     = length(aws_cloudwatch_log_metric_filter.signal) == 3 && strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "JOB_RESULT") && strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "\"status\": \"error\"")
+    error_message = "Filtro casa a linha JOB_RESULT com status error, como o Chico-Back imprime."
+  }
+  assert {
+    condition     = strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "LEADER_EVENT") && strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "config_error")
+    error_message = "Worker contínuo que recusa subir (AWS-021) também alarma."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.signal["job-error"].threshold == 1 && aws_cloudwatch_metric_alarm.signal["job-error"].period == 300 && aws_cloudwatch_metric_alarm.signal["job-partial"].threshold == 6 && aws_cloudwatch_metric_alarm.signal["job-partial"].period == 3600
+    error_message = "Um erro já alarma; parcial só quando se repete (W6)."
+  }
+  assert {
+    condition     = jsondecode(aws_cloudwatch_event_rule.task_failed.event_pattern).detail.lastStatus == ["STOPPED"] && strcontains(jsondecode(aws_cloudwatch_event_rule.task_failed.event_pattern).detail.clusterArn[0].wildcard, ":cluster/chico-uat-workers")
+    error_message = "Regra olha só tasks paradas do cluster dos workers deste ambiente."
+  }
+  assert {
+    condition     = length(jsondecode(aws_cloudwatch_event_rule.task_failed.event_pattern).detail["$or"]) == 2 && jsondecode(aws_cloudwatch_event_rule.task_failed.event_pattern).detail["$or"][0].containers.exitCode[0]["anything-but"] == 0
+    error_message = "Exit diferente de 0 ou falha ao subir; exit 0 (SIGTERM de deploy) não alarma."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_event_target.task_failed) == 0
+    error_message = "Sem tópico configurado, a regra existe mas não tem destino."
+  }
+}
+run "alerts_go_to_the_topic" {
+  command = plan
+  variables { alarm_topic_arns = ["arn:aws:sns:sa-east-1:123456789012:chico-uat-alerts"] }
+  assert {
+    condition     = length(aws_cloudwatch_event_target.task_failed) == 1 && alltrue([for alarm in aws_cloudwatch_metric_alarm.signal : contains(alarm.alarm_actions, "arn:aws:sns:sa-east-1:123456789012:chico-uat-alerts")])
+    error_message = "Regra e alarmes publicam no canal configurado."
+  }
+}
+run "reject_zero_partial_threshold" {
+  command = plan
+  variables { partial_alarm_threshold = 0 }
+  expect_failures = [var.partial_alarm_threshold]
+}
