@@ -15,13 +15,14 @@ workers_enabled = false
 workers_ami_id = "ami-0ab63037216e74e9b"
 
 # chico-workers por digest (123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:...).
-# Não existe: o ECR só tem imagens de fixture e restore. Sai do release do
-# backend (Chico-Back #272), que depende do deploy-dev e do OIDC do Chico-Back.
+# Não existe: o ECR só tem imagens de fixture e restore. Sai do release-dev do
+# backend (Chico-Back #272) quando a role ci-build-backend-dev for aplicada.
 workers_image = null
 
-# ARNs dos segredos que as task definitions referenciam. Não existem: nascem
-# no module.configuration quando a UAT for provisionada (secret_names).
-workers_secret_arns = []
+# Segredos por consumidor. valueFrom pode ser o nome em secret_names
+# (ex.: { name = "DATABASE_URL", valueFrom = "workers/DATABASE_URL" }): o ARN e
+# a lista que o papel de execução lê saem do module.configuration (secrets.tf).
+workers_secret_arns = [] # vazio = derivado de workers_secrets
 workers_secrets     = {}
 
 # Configuração pública comum (ENVIRONMENT, BSD_WORKER_ENABLED,

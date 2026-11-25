@@ -35,12 +35,12 @@ variable "frontend_image" {
   default     = null
 }
 variable "api_secret_arns" {
-  description = "Segredos que as task definitions da API e do frontend referenciam."
+  description = "Vazio = derivado de api_secrets (secrets.tf). Preencher só para fixar a lista à mão."
   type        = list(string)
   default     = []
 }
 variable "api_secrets" {
-  description = "Por serviço: { api = [{ name, valueFrom }], frontend = [...] }."
+  description = "Por serviço: { api = [{ name, valueFrom }], frontend = [...] }; valueFrom é ARN ou nome de secret_names (ex.: api/SECRET_KEY)."
   type        = map(list(object({ name = string, valueFrom = string })))
   default     = {}
 }
@@ -106,7 +106,7 @@ module "api_deploy" {
   account_id      = var.account_id
   smoke_urls      = concat([for host in var.api_host_names : "https://${host}/health/ready/release"], [for host in var.web_host_names : "https://${host}/"])
   test_header     = module.alb[0].test_header
-  secret_arns     = var.api_secret_arns
+  secret_arns     = local.api_secret_arns
   secrets_key_arn = local.uat_secrets_key_arn
   logs_key_arn    = local.api_logs_key_arn
   depends_on      = [module.funding]
@@ -132,7 +132,7 @@ module "web" {
   hook_execution_role_arn = module.api_deploy[0].hook_execution_role_arn
   logs_key_arn            = local.api_logs_key_arn
   alarm_names             = module.alb[0].alarm_names[each.key]
-  secrets                 = lookup(var.api_secrets, each.key, [])
+  secrets                 = lookup(local.api_secrets_resolved, each.key, [])
   environment             = lookup(var.api_environment, each.key, [])
   # Os ARNs dos papéis e da Lambda são montados pelo nome no api-deploy: sem
   # isto o Terraform não sabe que o serviço espera os dois existirem.
