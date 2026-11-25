@@ -21,12 +21,12 @@ variable "workers_ami_id" {
   default     = null
 }
 variable "workers_secret_arns" {
-  description = "Segredos que as task definitions dos workers referenciam; o papel de execução lê só estes."
+  description = "Vazio = derivado de workers_secrets (secrets.tf). Preencher só para fixar a lista à mão."
   type        = list(string)
   default     = []
 }
 variable "workers_secrets" {
-  description = "Por consumidor: { consumidor = [{ name, valueFrom }] }."
+  description = "Por consumidor: { consumidor = [{ name, valueFrom }] }; valueFrom é ARN ou nome de secret_names (ex.: workers/DATABASE_URL)."
   type        = map(list(object({ name = string, valueFrom = string })))
   default     = {}
 }
@@ -55,7 +55,7 @@ module "workers_iam" {
   source          = "../../modules/workers-iam"
   env             = "uat"
   account_id      = var.account_id
-  secret_arns     = var.workers_secret_arns
+  secret_arns     = local.workers_secret_arns
   secrets_key_arn = local.uat_secrets_key_arn
   depends_on      = [module.funding]
 }
@@ -71,7 +71,7 @@ module "workers" {
   instance_profile_arn   = module.workers_iam[0].instance_profile_arn
   execution_role_arn     = module.workers_iam[0].execution_role_arn
   task_role_arns         = module.workers_iam[0].task_role_arns
-  secrets                = var.workers_secrets
+  secrets                = local.workers_secrets_resolved
   environment            = var.workers_environment
   logs_key_arn           = var.workers_logs_key_arn != null ? var.workers_logs_key_arn : local.uat_logs_key_arn
   alarm_topic_arns       = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)

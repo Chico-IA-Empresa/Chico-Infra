@@ -4,8 +4,8 @@
 uma identidade própria que **só publica imagens**: push e leitura em
 `chico-api` e `chico-workers`, mais as duas ações que a AWS só aceita com
 Resource `*` (`ecr:GetAuthorizationToken` e `ecr:GetRegistryScanningConfiguration`).
-Não há state, SSM, ECS, segredos nem `chico-frontend`. O front ganha a sua
-quando o workflow dele existir; deploy é outra identidade, decidida depois.
+Não há state, SSM, ECS, segredos nem `chico-frontend`. Deploy é outra
+identidade, decidida depois.
 
 ## Como ligar (inputs privados do Shared)
 
@@ -37,3 +37,18 @@ e subject customizado divergente de
   impedem sobrescrita, mas não restringem o nome. O workflow usa o SHA do commit.
 - O subject limita repositório e Environment, não o arquivo YAML. A proteção do
   Environment (só `main`) é o que impede uma branch qualquer de publicar.
+
+## Chico-Front
+
+`envs/shared/frontend-release-ci.tf` é o par do front: role
+`ci-build-frontend-dev`, subject
+`repo:Chico-IA-Empresa/Chico-Front:environment:release-dev`, push e leitura só
+em `chico-frontend`. Liga com `frontend_release_ci = { review_reference = "..." }`
+e o binding abaixo; mesmas preconditions e mesmos limites.
+
+```hcl
+ci-build-frontend-dev = {
+  scope = "dev", repository = "Chico-IA-Empresa/Chico-Front"
+  environment = "release-dev", writable_state = false, state_access = false
+}
+```
