@@ -41,10 +41,10 @@ variable "alarm_topic_arns" {
 # Fora da trava SofaScore:
 #   match-analysis 05:00/17:00 (LLM, trava própria)
 #   league-reports 06:00, o mesmo horário do laço da VPS hoje (decisão W4)
-#   odds-history-purge 03:20, menor tráfego (AWS-020)
+#   odds-history-purge 03:20, menor tráfego (WORK-03a)
 #   account-deletions de hora em hora no minuto 12 (ENT-02)
 #   data-freshness :04 :19 :34 :49 — só leitura, trava própria, fora das
-#   marcas SofaScore para não medir no meio de uma escrita (AWS-023)
+#   marcas SofaScore para não medir no meio de uma escrita (WORK-03a)
 locals {
   timezone = "America/Sao_Paulo"
   cadence = {
