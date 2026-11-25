@@ -16,6 +16,7 @@ variables {
   workers_image     = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   workers_ami_id    = "ami-0123456789abcdef0"
   secret_names      = ["workers/DATABASE_URL"]
+  secrets_key_arn   = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111"
 }
 
 run "no_references_no_secret_grant" {
