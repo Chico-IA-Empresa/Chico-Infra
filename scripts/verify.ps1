@@ -15,7 +15,7 @@ function Invoke-TaskTerraform([string]$Directory, [string[]]$Arguments) {
 }
 try {
   Invoke-TaskTerraform '.' @('fmt', '-check', '-recursive')
-  $taskRoots = @('bootstrap', 'envs/shared', 'envs/dev', 'envs/uat', 'envs/prod', 'modules/network', 'modules/funding', 'modules/oidc', 'modules/data', 'modules/web-service', 'modules/dev-box', 'modules/schedules', 'modules/workers', 'modules/workers-iam', 'modules/alb', 'modules/api-deploy', 'modules/budgets', 'modules/audit', 'modules/access-log-sink')
+  $taskRoots = @('bootstrap', 'envs/shared', 'envs/dev', 'envs/uat', 'envs/prod', 'modules/network', 'modules/funding', 'modules/oidc', 'modules/data', 'modules/web-service', 'modules/dev-box', 'modules/schedules', 'modules/workers', 'modules/workers-iam', 'modules/alb', 'modules/api-deploy', 'modules/edge', 'modules/budgets', 'modules/audit', 'modules/access-log-sink')
   foreach ($taskDir in $taskRoots) {
     $taskArgs = @('init', '-backend=false', '-input=false', '-no-color', '-lockfile=readonly')
     if ($PluginDirectory) { $taskArgs += "-plugin-dir=$PluginDirectory" }

@@ -10,7 +10,7 @@ variable "api_enabled" {
   default = false
 }
 variable "api_certificate_arn" {
-  description = "Certificado ACM emitido para os hosts abaixo. Passa a vir do modules/edge quando o Chico-Infra #43 entrar."
+  description = "Certificado ACM emitido para os hosts abaixo. Fica explícito: o certificate_arn do output edge só serve depois de ISSUED, e listener com certificado pendente falha."
   type        = string
   default     = null
 }

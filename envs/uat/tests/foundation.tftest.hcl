@@ -30,7 +30,7 @@ run "keys_and_topic_scoped_to_uat" {
     error_message = "Alias e tópico no namespace de UAT."
   }
   assert {
-    condition     = contains(one([for statement in jsondecode(aws_kms_key.uat["logs"].policy).Statement : statement.Condition.StringEquals["kms:EncryptionContext:aws:logs:arn"] if statement.Sid == "RegionalLogEncryption"]), "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/uat/workers")
+    condition     = contains(one([for statement in jsondecode(aws_kms_key.uat["logs"].policy).Statement : statement.Condition.StringEquals["kms:EncryptionContext:aws:logs:arn"] if statement.Sid == "RegionalLogEncryption"]), "arn:aws:logs:sa-east-1:123456789012:log-group:/chico/uat/workers") && contains(one([for statement in jsondecode(aws_kms_key.uat["logs"].policy).Statement : statement.Condition.StringEquals["kms:EncryptionContext:aws:logs:arn"] if statement.Sid == "RegionalLogEncryption"]), "arn:aws:logs:sa-east-1:123456789012:log-group:aws-waf-logs-chico-uat-api")
     error_message = "A chave de logs só cifra os log groups que os blocos de UAT criam."
   }
   assert {

@@ -21,8 +21,8 @@ locals {
   operations_topic  = "arn:aws:sns:sa-east-1:${var.account_id}:chico-uat-operations"
   task_failed_rule  = "arn:aws:events:sa-east-1:${var.account_id}:rule/chico-uat-workers-task-failed"
   uat_alarms        = "arn:aws:cloudwatch:sa-east-1:${var.account_id}:alarm:chico-uat-*"
-  # Log groups que os blocos de UAT criam (modules/workers, web-service, api-deploy).
-  uat_log_groups = [for name in ["/chico/uat/workers", "/chico/uat/api", "/chico/uat/frontend", "/aws/lambda/chico-uat-api-smoke"] : "arn:aws:logs:sa-east-1:${var.account_id}:log-group:${name}"]
+  # Log groups que os blocos de UAT criam (modules/workers, web-service, api-deploy, edge).
+  uat_log_groups = [for name in ["/chico/uat/workers", "/chico/uat/api", "/chico/uat/frontend", "/aws/lambda/chico-uat-api-smoke", "aws-waf-logs-chico-uat-api"] : "arn:aws:logs:sa-east-1:${var.account_id}:log-group:${name}"]
 
   key_statements = {
     logs = [
