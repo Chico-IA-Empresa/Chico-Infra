@@ -38,4 +38,8 @@ run "prod_protected_baseline" {
     condition     = aws_db_instance.this[0].deletion_protection && !aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 14 && aws_db_instance.this[0].instance_class == "db.t4g.medium" && !aws_db_instance.this[0].multi_az
     error_message = "Preservar baseline e proteção aprovados AWS-005."
   }
+  assert {
+    condition     = contains([for parameter in aws_db_parameter_group.this[0].parameter : "${parameter.name}=${parameter.value}"], "idle_in_transaction_session_timeout=300000")
+    error_message = "Sessão ociosa no meio de transação cai em 5 min, não no default de 24 h do RDS."
+  }
 }
