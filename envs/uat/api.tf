@@ -61,7 +61,8 @@ variable "api_alarm_topic_arns" {
 }
 
 locals {
-  api_on = var.provision_enabled && var.api_enabled
+  api_on           = var.provision_enabled && var.api_enabled
+  api_logs_key_arn = var.api_logs_key_arn != null ? var.api_logs_key_arn : local.uat_logs_key_arn
   web_services = {
     api      = { image = var.api_image, security_group = "api" }
     frontend = { image = var.frontend_image, security_group = "frontend" }
@@ -94,7 +95,7 @@ module "alb" {
   certificate_arn       = var.api_certificate_arn
   api_host_names        = var.api_host_names
   web_host_names        = var.web_host_names
-  alarm_topic_arns      = var.api_alarm_topic_arns
+  alarm_topic_arns      = concat(var.api_alarm_topic_arns, local.uat_alarm_topics)
   depends_on            = [module.funding]
 }
 
@@ -106,8 +107,8 @@ module "api_deploy" {
   smoke_urls      = concat([for host in var.api_host_names : "https://${host}/health/ready/release"], [for host in var.web_host_names : "https://${host}/"])
   test_header     = module.alb[0].test_header
   secret_arns     = var.api_secret_arns
-  secrets_key_arn = var.secrets_key_arn
-  logs_key_arn    = var.api_logs_key_arn
+  secrets_key_arn = local.uat_secrets_key_arn
+  logs_key_arn    = local.api_logs_key_arn
   depends_on      = [module.funding]
 }
 
@@ -129,7 +130,7 @@ module "web" {
   alb_management_role_arn = module.api_deploy[0].alb_management_role_arn
   smoke_hook_arn          = module.api_deploy[0].smoke_hook_arn
   hook_execution_role_arn = module.api_deploy[0].hook_execution_role_arn
-  logs_key_arn            = var.api_logs_key_arn
+  logs_key_arn            = local.api_logs_key_arn
   alarm_names             = module.alb[0].alarm_names[each.key]
   secrets                 = lookup(var.api_secrets, each.key, [])
   environment             = lookup(var.api_environment, each.key, [])
