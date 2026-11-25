@@ -43,7 +43,7 @@ jobs:
           terraform -chdir=envs/shared test
           terraform -chdir=envs/uat test
           terraform -chdir=operations/restore-staging/terraform test
-          for module in network funding oidc data schedules workers workers-iam web-service dev-box budgets audit access-log-sink restore-access restore-staging; do
+          for module in network funding oidc data schedules workers workers-iam alb web-service dev-box budgets audit access-log-sink restore-access restore-staging; do
             terraform -chdir="modules/$module" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="modules/$module" validate
             terraform -chdir="modules/$module" test
