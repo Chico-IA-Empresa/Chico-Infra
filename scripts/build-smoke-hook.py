@@ -20,6 +20,9 @@ def build() -> bytes:
     buffer = io.BytesIO()
     info = zipfile.ZipInfo("handler.py", date_time=(2026, 1, 1, 0, 0, 0))
     info.external_attr = 0o644 << 16
+    # O zipfile grava o SO de origem (0 no Windows, 3 no Unix): fixar em Unix
+    # para o zip gerado em qualquer máquina bater com o que o CI regenera.
+    info.create_system = 3
     info.compress_type = zipfile.ZIP_DEFLATED
     source = SOURCE.read_bytes().replace(b"\r\n", b"\n")
     with zipfile.ZipFile(buffer, "w") as archive:
