@@ -16,12 +16,13 @@ variables {
     match-analysis     = "arn:aws:ecs:sa-east-1:123456789012:task-definition/chico-uat-match-analysis:1"
     odds-history-purge = "arn:aws:ecs:sa-east-1:123456789012:task-definition/chico-uat-odds-history-purge:1"
     account-deletions  = "arn:aws:ecs:sa-east-1:123456789012:task-definition/chico-uat-account-deletions:1"
+    data-freshness     = "arn:aws:ecs:sa-east-1:123456789012:task-definition/chico-uat-data-freshness:1"
   }
 }
-run "ten_disabled_schedules" {
+run "eleven_disabled_schedules" {
   command = plan
   assert {
-    condition     = length(aws_scheduler_schedule.this) == 10 && alltrue([for schedule in aws_scheduler_schedule.this : schedule.state == "DISABLED"])
+    condition     = length(aws_scheduler_schedule.this) == 11 && alltrue([for schedule in aws_scheduler_schedule.this : schedule.state == "DISABLED"])
     error_message = "Preparação não pode ativar consumidores."
   }
 }
@@ -34,6 +35,10 @@ run "brt_cron_instead_of_utc_rate" {
   assert {
     condition     = aws_scheduler_schedule.this["league-reports"].schedule_expression == "cron(0 6 * * ? *)"
     error_message = "league-reports roda às 06h BRT, como o laço da VPS (W4)."
+  }
+  assert {
+    condition     = aws_scheduler_schedule.this["data-freshness"].schedule_expression == "cron(4/15 * * * ? *)"
+    error_message = "data-freshness roda a cada 15 min, fora das marcas dos jobs SofaScore."
   }
 }
 run "dlq_receives_failed_invocations" {
