@@ -26,8 +26,9 @@ e subject customizado divergente de
 ## Do lado do Chico-Back
 
 1. Criar o Environment `release-dev`, restrito à branch `main`.
-2. Variáveis do Environment: `AWS_RELEASE_ROLE_ARN` (output
-   `backend_release_ci_review.role_arn`) e `ECR_REGISTRY`.
+2. Variáveis de repositório (o `if` do job não enxerga as de Environment):
+   `AWS_RELEASE_ROLE_ARN` (output `backend_release_ci_review.role_arn`) e
+   `ECR_REGISTRY`.
 3. Sem `AWS_RELEASE_ROLE_ARN` o job de release é pulado.
 
 ## Limites
