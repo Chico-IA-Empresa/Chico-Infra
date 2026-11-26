@@ -91,7 +91,7 @@ run "site_routes_follow_the_aws003_contract" {
     error_message = "Só a rota do site para a API reescreve; /api/contact fica com o Next."
   }
   assert {
-    condition     = output.service_routes == { api = ["api", "api-site"], frontend = ["contact", "frontend"] } && length(output.load_balancers["api"]) == 2 && length(output.load_balancers["frontend"]) == 2
+    condition     = jsonencode(output.service_routes) == jsonencode({ api = ["api", "api-site"], frontend = ["contact", "frontend"] }) && length(output.load_balancers["api"]) == 2 && length(output.load_balancers["frontend"]) == 2
     error_message = "Cada serviço recebe um load_balancer por rota para o web-service."
   }
 }
