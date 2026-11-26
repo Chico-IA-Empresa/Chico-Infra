@@ -92,7 +92,7 @@ locals {
     }
   ]...)
   service_routes = { for service in distinct([for cfg in values(local.routes) : cfg.service]) : service => sort([for route, cfg in local.routes : route if cfg.service == service]) }
-  test_header = "x-chico-deploy-test"
+  test_header    = "x-chico-deploy-test"
 }
 
 resource "aws_lb" "this" {
