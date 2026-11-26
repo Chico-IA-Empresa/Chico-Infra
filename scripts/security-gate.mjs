@@ -11,6 +11,9 @@ export function verifyExceptionSources(exceptions, readSource) {
   }
 }
 
+// Rótulos fixos aceitos: a revisão técnica original e a decisão do dono do
+// repositório. Qualquer outro texto reprova.
+const REVIEWERS = new Set(['Codex technical review', 'Repository owner review']);
 export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
   if (!['bootstrap', 'shared', 'dev', 'restore-staging', 'rds-recovery-foundation', 'rds-importer'].includes(scope)) throw new Error('Unknown security scope');
   if (!report?.summary || report.summary.parsing_errors !== 0 || report.summary.skipped !== 0 ||
@@ -26,7 +29,7 @@ export function evaluateSecurity(report, exceptions, scope, now = new Date()) {
   for (const entry of scoped) {
     const signature = `${entry.check}:${entry.resource}`;
     if (signatures.has(signature) || !entry.reason?.trim() || !entry.compensatingControl?.trim() ||
-        !entry.reference?.trim() || entry.reviewedBy !== 'Codex technical review' ||
+        !entry.reference?.trim() || !REVIEWERS.has(entry.reviewedBy) ||
         !Number.isFinite(Date.parse(entry.reviewedAt)) || Date.parse(entry.reviewedAt) > now.getTime() ||
         !Number.isFinite(Date.parse(entry.expiresAt)) || Date.parse(entry.expiresAt) <= now.getTime()) {
       throw new Error(`Invalid, duplicate or expired exception: ${signature}`);
