@@ -4,6 +4,8 @@ O CI e `scripts/check-security.ps1` avaliam a root `operations/restore-staging/t
 
 O Checkov3.3.29 encontrou 31 controles aprovados e dois achados, sem skips ou erros de parsing. `security/restore-staging-exceptions.json` aceita somente esses dois endereços/checks, com motivo, controles, validade e SHA256 normalizado do módulo. Mudança de fonte, achado novo, exceção expirada/obsoleta ou supressão bloqueiam o gate. As 43 exceções dos scopes permanentes continuam separadas. O scan geral de todos os blueprints permanece obrigatório.
 
+Renovação em 2026-11-26: as duas exceções (`CKV_AWS_126` e `CKV_AWS_88`) venceram nesse dia e travavam o `Infra validation` de todo PR. O SHA256 normalizado de `modules/restore-staging/main.tf` continuava igual ao revisado em 2026-10-28, então motivo e controles valem para o mesmo código; a validade foi estendida até 2027-01-25, o mesmo prazo das exceções de Dev, com aprovação do dono do repositório. Qualquer mudança no módulo continua invalidando as duas.
+
 | Achado | Decisão técnica e limite |
 |---|---|
 | CKV_AWS_126 | Manter monitoramento EC2 básico no host temporário, dentro da proposta. [AWS documenta métricas básicas de cinco minutos e monitoramento detalhado de um minuto com cobrança adicional](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/manage-detailed-monitoring.html). Acompanhamento SSM, timer persistente UTC e lease IAM exigem prova no host; a presença do código não comprova seu funcionamento. |
