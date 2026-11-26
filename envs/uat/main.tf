@@ -23,7 +23,7 @@ module "configuration" {
   source          = "../../modules/configuration"
   env             = "uat"
   secret_names    = var.secret_names
-  secrets_key_arn = var.secrets_key_arn
+  secrets_key_arn = local.uat_secrets_key_arn
   parameters      = var.parameters
   depends_on      = [module.funding]
 }

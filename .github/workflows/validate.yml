@@ -41,8 +41,9 @@ jobs:
           done
           terraform -chdir=envs/dev test
           terraform -chdir=envs/shared test
+          terraform -chdir=envs/uat test
           terraform -chdir=operations/restore-staging/terraform test
-          for module in network funding oidc data schedules workers web-service dev-box budgets audit access-log-sink restore-access restore-staging; do
+          for module in network funding oidc data schedules workers workers-iam alb api-deploy web-service dev-box budgets audit access-log-sink restore-access restore-staging edge; do
             terraform -chdir="modules/$module" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="modules/$module" validate
             terraform -chdir="modules/$module" test
@@ -62,6 +63,7 @@ jobs:
       - name: Fixture Compose interpolation from the clean SSM working context
         run: python tests/dev-fixture-compose-config.test.py
       - run: python tests/proxy-events.test.py
+      - run: python tests/api-smoke-hook.test.py
       - run: python tests/dev-database-backup.test.py
       - run: python tests/runtime-iam-read-negatives.test.py
       - run: python tests/restore-source-copy.test.py

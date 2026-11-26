@@ -57,6 +57,10 @@ run "host_is_arm64_imdsv2_encrypted_in_one_az" {
     error_message = "EBS cifrado e sem CPU Unlimited não aprovado."
   }
   assert {
+    condition     = aws_launch_template.host.network_interfaces[0].associate_public_ip_address == "true" && contains(aws_launch_template.host.network_interfaces[0].security_groups, "sg-workers")
+    error_message = "Sem NAT na rede, o host precisa de IP público para registrar no ECS e baixar imagem; o SG workers vai na interface."
+  }
+  assert {
     condition     = aws_autoscaling_group.host.min_size == 0 && aws_autoscaling_group.host.max_size == 2 && length(aws_autoscaling_group.host.vpc_zone_identifier) == 1
     error_message = "ASG começa vazio, teto revisado e uma subnet só (mesma AZ do RDS)."
   }
@@ -129,7 +133,7 @@ run "job_failures_reach_the_alarms" {
   }
   assert {
     condition     = strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "LEADER_EVENT") && strcontains(aws_cloudwatch_log_metric_filter.signal["config-error"].pattern, "config_error")
-    error_message = "Worker contínuo que recusa subir (AWS-021) também alarma."
+    error_message = "Worker contínuo que recusa subir (WORK-01a) também alarma."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.signal["job-error"].threshold == 1 && aws_cloudwatch_metric_alarm.signal["job-error"].period == 300 && aws_cloudwatch_metric_alarm.signal["job-partial"].threshold == 6 && aws_cloudwatch_metric_alarm.signal["job-partial"].period == 3600

@@ -36,3 +36,7 @@ Workflow novo `.github/workflows/rds-recovery.yml`, ainda local: mocks de módul
 ## Execution approval and exact security review — 10 November 2026
 
 Felipe authorized the required reviews/publication/merges and bounded execution of this database-only goal, with existing credit-only limits, preservation and private-processing controls. This supersedes the earlier pending human decisions above, not the runtime evidence requirements. The eight findings remain visible in raw Checkov output; security/rds-recovery-exceptions.json binds each check/resource to its normalized source SHA256 and expires on 17 November UTC. The gate rejects new/obsolete findings, skips, parse errors, source changes and expired reviews. Technical gate success does not claim operational or data acceptance. Existing staging supplements and plans still require technical reconciliation before execution.
+
+## Renovação das exceções (2026-11-26)
+
+As 8 exceções de `security/rds-recovery-exceptions.json` venceram em 2026-11-17 (a revisão original deu 7 dias, por ser operação temporária) e travavam o gate de revisão do RDS em todo PR que tocasse o gate. O SHA256 normalizado de cada `sourceFile` continuava igual ao revisado em 2026-11-10. O dono do repositório decidiu renovar até 2027-01-25 (`reviewedBy: Repository owner review`). Quando a operação de recuperação terminar, o caminho certo é remover os recursos temporários (ex.: `chico-prod-rds-importer`) e, com eles, estas exceções.
