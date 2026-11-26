@@ -1,6 +1,7 @@
 # Identidade OIDC de publicação de imagens do Chico-Back (WORK/API release-dev).
 # Só empurra e lê chico-api e chico-workers; não tem state, SSM, ECS nem
-# segredos. Deploy continua sendo outra identidade, decidida depois.
+# segredos. O pull (GetDownloadUrlForLayer) é necessário: o workflow roda a
+# imagem recém-publicada para ler a head do Alembic. Deploy continua sendo outra identidade, decidida depois.
 # Este root concede a policy; module.oidc cria a role com trust exato.
 variable "backend_release_ci" {
   description = "Null deixa a policy ausente. A role vem do binding ci-build-backend-dev em oidc_bindings."
@@ -34,7 +35,7 @@ resource "aws_iam_policy" "backend_release_ci" {
     { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
     { Effect = "Allow", Action = [
       "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
-      "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage",
+      "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
       "ecr:DescribeImages", "ecr:DescribeRepositories", "ecr:DescribeImageScanFindings"
     ], Resource = local.backend_release_ci_repositories },
     { Effect = "Allow", Action = ["ecr:GetRegistryScanningConfiguration"], Resource = "*" }
