@@ -48,3 +48,13 @@ run "workers_wired_but_nothing_runs" {
     error_message = "Onze schedules, ligados às task definitions do modules/workers."
   }
 }
+run "reject_unknown_worker_service_count" {
+  command = plan
+  variables { workers_service_desired_counts = { odds-api = 1 } }
+  expect_failures = [var.workers_service_desired_counts]
+}
+run "reject_second_replica_of_a_leader_worker" {
+  command = plan
+  variables { workers_service_desired_counts = { odds-bsd = 2 } }
+  expect_failures = [var.workers_service_desired_counts]
+}

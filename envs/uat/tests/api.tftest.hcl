@@ -43,4 +43,23 @@ run "api_and_frontend_wired_behind_the_alb" {
     condition     = module.api_deploy[0].smoke_hook_arn == "arn:aws:lambda:sa-east-1:123456789012:function:chico-uat-api-smoke" && length(module.alb[0].alarm_names["api"]) == 8 && length(module.alb[0].load_balancers["api"]) == 2
     error_message = "O web-service recebe o smoke e os alarmes de rollback do ALB."
   }
+  assert {
+    condition = (
+      length(aws_ecs_task_definition.migrate) == 1 &&
+      aws_ecs_task_definition.migrate[0].runtime_platform[0].cpu_architecture == "ARM64" &&
+      strcontains(aws_ecs_task_definition.migrate[0].container_definitions, "alembic upgrade heads") &&
+      strcontains(aws_ecs_task_definition.migrate[0].container_definitions, "verify_schema_authority.py")
+    )
+    error_message = "A migration é a mesma da VPS (baseline, upgrade heads, verificação), na imagem ARM da API."
+  }
+}
+run "reject_unknown_web_service_count" {
+  command = plan
+  variables { api_desired_counts = { worker = 1 } }
+  expect_failures = [var.api_desired_counts]
+}
+run "reject_more_than_two_api_tasks" {
+  command = plan
+  variables { api_desired_counts = { api = 3 } }
+  expect_failures = [var.api_desired_counts]
 }

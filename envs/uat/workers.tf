@@ -1,10 +1,10 @@
 # Workers e jobs em UAT (Camada 04): papéis → cluster/serviços/jobs → schedules.
 # Duas chaves: `provision_enabled` (o resto do ambiente) e `workers_enabled`
 # (este bloco). Mesmo com as duas ligadas, NADA roda: os três serviços nascem
-# com desired_count 0 e os onze schedules DISABLED. Ligar consumidor é uma
-# mudança revisada à parte (service_desired_counts no modules/workers;
-# enabled + application_proofs_approved no modules/schedules), depois do
-# ensaio da fase 3; este root não expõe essas chaves de propósito.
+# com desired_count 0 e os onze schedules DISABLED. Ligar é um apply revisado
+# com as chaves de run-switches.tf (workers_service_desired_counts,
+# workers_schedules_enabled + workers_application_proofs_approved), depois do
+# ensaio da fase 3.
 
 variable "workers_enabled" {
   type    = bool
@@ -75,6 +75,7 @@ module "workers" {
   environment            = var.workers_environment
   logs_key_arn           = var.workers_logs_key_arn != null ? var.workers_logs_key_arn : local.uat_logs_key_arn
   alarm_topic_arns       = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)
+  service_desired_counts = merge({ odds-bsd = 0, odds-surebetting = 0, telegram-update = 0 }, var.workers_service_desired_counts)
   # Os ARNs dos papéis são montados pelo nome no workers-iam: sem isto o
   # Terraform não sabe que o launch template e as task definitions esperam
   # os papéis existirem.
@@ -82,16 +83,18 @@ module "workers" {
 }
 
 module "schedules" {
-  count                = local.workers_on ? 1 : 0
-  source               = "../../modules/schedules"
-  env                  = "uat"
-  cluster_arn          = module.workers[0].cluster_arn
-  target_role_arn      = module.workers_iam[0].scheduler_role_arn
-  public_subnet_ids    = toset(module.network[0].public_subnet_ids)
-  jobs_sg_id           = module.network[0].security_group_ids["jobs"]
-  task_definition_arns = module.workers[0].job_task_definition_arns
-  alarm_topic_arns     = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)
-  depends_on           = [module.funding, module.workers_iam]
+  count                       = local.workers_on ? 1 : 0
+  source                      = "../../modules/schedules"
+  env                         = "uat"
+  cluster_arn                 = module.workers[0].cluster_arn
+  target_role_arn             = module.workers_iam[0].scheduler_role_arn
+  public_subnet_ids           = toset(module.network[0].public_subnet_ids)
+  jobs_sg_id                  = module.network[0].security_group_ids["jobs"]
+  task_definition_arns        = module.workers[0].job_task_definition_arns
+  alarm_topic_arns            = concat(var.workers_alarm_topic_arns, local.uat_alarm_topics)
+  enabled                     = var.workers_schedules_enabled
+  application_proofs_approved = var.workers_application_proofs_approved
+  depends_on                  = [module.funding, module.workers_iam]
 }
 
 output "workers_cluster_arn" { value = try(module.workers[0].cluster_arn, null) }

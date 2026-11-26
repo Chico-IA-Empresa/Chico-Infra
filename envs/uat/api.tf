@@ -2,8 +2,8 @@
 # blue-green (API e frontend), com papéis e smoke do modules/api-deploy.
 # Duas chaves: `provision_enabled` (o resto do ambiente) e `api_enabled`. Mesmo
 # com as duas ligadas, nenhuma task sobe: o web-service nasce com
-# desired_count 0, e este root não expõe a contagem de propósito — ligar é uma
-# mudança revisada à parte, depois do ensaio.
+# desired_count 0. Ligar é `api_desired_counts` (run-switches.tf), depois da
+# migration (migrate.tf).
 
 variable "api_enabled" {
   type    = bool
@@ -136,6 +136,7 @@ module "web" {
   alarm_names             = module.alb[0].alarm_names[each.key]
   secrets                 = lookup(local.api_secrets_resolved, each.key, [])
   environment             = lookup(var.api_environment, each.key, [])
+  desired_count           = lookup(var.api_desired_counts, each.key, 0)
   # Os ARNs dos papéis e da Lambda são montados pelo nome no api-deploy: sem
   # isto o Terraform não sabe que o serviço espera os dois existirem.
   depends_on = [module.funding, module.api_deploy, aws_ecs_cluster_capacity_providers.web]
