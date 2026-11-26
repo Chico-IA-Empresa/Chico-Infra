@@ -116,6 +116,15 @@ resource "aws_db_parameter_group" "this" {
     name  = "log_min_duration_statement"
     value = "500"
   }
+  # O default do RDS é 24 h (86400000 ms, lido na conta em 2026-11-24): uma
+  # sessão esquecida no meio de uma transação segura locks e impede o vacuum
+  # por um dia. API e workers já fixam 120 s por sessão (opções de conexão do
+  # Chico-Back); isto é a rede para todo o resto — Alembic, psql de operador,
+  # importer. Parâmetro dinâmico, sem reboot.
+  parameter {
+    name  = "idle_in_transaction_session_timeout"
+    value = "300000"
+  }
 }
 resource "aws_cloudwatch_log_group" "postgresql" {
   count             = var.rds_enabled ? 1 : 0
