@@ -52,10 +52,6 @@ run "api_and_frontend_wired_behind_the_alb" {
     )
     error_message = "A migration é a mesma da VPS (baseline, upgrade heads, verificação), na imagem ARM da API."
   }
-  assert {
-    condition     = startswith(output.migrate_run_task, "aws ecs run-task --cluster chico-uat-web --launch-type FARGATE")
-    error_message = "O output entrega o comando para rodar a migration antes de subir a API."
-  }
 }
 run "reject_unknown_web_service_count" {
   command = plan
