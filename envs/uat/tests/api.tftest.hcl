@@ -40,7 +40,7 @@ run "api_and_frontend_wired_behind_the_alb" {
     error_message = "ALB, papéis/smoke, cluster e os dois web-service entram juntos."
   }
   assert {
-    condition     = module.api_deploy[0].smoke_hook_arn == "arn:aws:lambda:sa-east-1:123456789012:function:chico-uat-api-smoke" && length(module.alb[0].alarm_names["api"]) == 4
+    condition     = module.api_deploy[0].smoke_hook_arn == "arn:aws:lambda:sa-east-1:123456789012:function:chico-uat-api-smoke" && length(module.alb[0].alarm_names["api"]) == 8 && length(module.alb[0].load_balancers["api"]) == 2
     error_message = "O web-service recebe o smoke e os alarmes de rollback do ALB."
   }
 }

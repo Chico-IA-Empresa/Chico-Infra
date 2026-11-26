@@ -104,12 +104,17 @@ module "api_deploy" {
   source          = "../../modules/api-deploy"
   env             = "uat"
   account_id      = var.account_id
-  smoke_urls      = concat([for host in var.api_host_names : "https://${host}/health/ready/release"], [for host in var.web_host_names : "https://${host}/"])
   test_header     = module.alb[0].test_header
   secret_arns     = local.api_secret_arns
   secrets_key_arn = local.uat_secrets_key_arn
   logs_key_arn    = local.api_logs_key_arn
   depends_on      = [module.funding]
+  # Pelo site também: /api/health/ready/release prova a rota com reescrita.
+  smoke_urls = concat(
+    [for host in var.api_host_names : "https://${host}/health/ready/release"],
+    [for host in var.web_host_names : "https://${host}/api/health/ready/release"],
+    [for host in var.web_host_names : "https://${host}/"],
+  )
 }
 
 module "web" {
@@ -123,10 +128,7 @@ module "web" {
   task_role_arn           = module.api_deploy[0].task_role_arns[each.key]
   public_subnet_ids       = module.network[0].public_subnet_ids
   security_group_id       = module.network[0].security_group_ids[each.value.security_group]
-  blue_target_group_arn   = module.alb[0].target_group_arns[each.key]["blue"]
-  green_target_group_arn  = module.alb[0].target_group_arns[each.key]["green"]
-  production_rule_arn     = module.alb[0].production_rule_arns[each.key]
-  test_rule_arn           = module.alb[0].test_rule_arns[each.key]
+  load_balancers          = module.alb[0].load_balancers[each.key]
   alb_management_role_arn = module.api_deploy[0].alb_management_role_arn
   smoke_hook_arn          = module.api_deploy[0].smoke_hook_arn
   hook_execution_role_arn = module.api_deploy[0].hook_execution_role_arn
