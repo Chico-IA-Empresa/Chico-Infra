@@ -20,6 +20,10 @@ test('new resource, check, suppression and parsing failures cannot inherit an ex
     const changed = structuredClone(report); mutate(changed); assert.throws(() => evaluateSecurity(changed, [entry], 'dev', now));
   }
 });
+test('only the fixed review labels are accepted', () => {
+  assert.equal(evaluateSecurity(report, [{ ...entry, reviewedBy: 'Repository owner review' }], 'dev', now).operationalAcceptance, false);
+  for (const reviewedBy of ['Someone', 'repository owner review', 'Claude technical review', '', undefined]) assert.throws(() => evaluateSecurity(report, [{ ...entry, reviewedBy }], 'dev', now), /Invalid/);
+});
 test('expired, duplicate, future and obsolete exceptions fail closed', () => {
   for (const entries of [[{ ...entry, expiresAt: '2026-10-27' }], [entry, entry], [{ ...entry, reviewedAt: '2026-10-28' }], [entry, { ...entry, resource: 'aws_test.obsolete' }]]) assert.throws(() => evaluateSecurity(report, entries, 'dev', now));
 });
