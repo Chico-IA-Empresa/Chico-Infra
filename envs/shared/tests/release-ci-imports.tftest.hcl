@@ -41,10 +41,12 @@ run "adopts_the_six_hand_made_resources" {
   override_resource {
     target          = aws_iam_policy.backend_release_ci[0]
     override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:policy/chico/shared/chico-backend-release-ecr" }
   }
   override_resource {
     target          = aws_iam_policy.frontend_release_ci[0]
     override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:policy/chico/shared/chico-frontend-release-ecr" }
   }
   override_resource {
     target          = aws_iam_role_policy_attachment.backend_release_ci[0]
