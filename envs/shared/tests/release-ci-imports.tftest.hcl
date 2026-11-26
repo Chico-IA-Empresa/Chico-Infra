@@ -29,6 +29,31 @@ variables {
 
 run "adopts_the_six_hand_made_resources" {
   command = plan
+  # Mock não importa: cada alvo dos blocos import recebe um override.
+  override_resource {
+    target          = module.oidc[0].aws_iam_role.ci["ci-build-backend-dev"]
+    override_during = plan
+  }
+  override_resource {
+    target          = module.oidc[0].aws_iam_role.ci["ci-build-frontend-dev"]
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_policy.backend_release_ci[0]
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_policy.frontend_release_ci[0]
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role_policy_attachment.backend_release_ci[0]
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role_policy_attachment.frontend_release_ci[0]
+    override_during = plan
+  }
   variables {
     provision_enabled   = true
     backend_release_ci  = { review_reference = "synthetic-only" }
