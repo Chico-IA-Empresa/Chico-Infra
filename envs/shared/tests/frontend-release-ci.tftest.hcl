@@ -10,6 +10,7 @@ mock_provider "aws" {
 }
 variables {
   account_id                   = "123456789012"
+  release_ci_import_existing   = false # o mock não tem recurso real para adotar
   owner                        = "synthetic-only"
   cost_center                  = "synthetic-only"
   audit_bucket_name            = "synthetic-audit-only"
