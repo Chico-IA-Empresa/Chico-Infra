@@ -57,7 +57,7 @@ run "backend_release_exact_ecr_grant" {
   assert {
     condition = jsondecode(aws_iam_policy.backend_release_ci[0].policy) == jsondecode(jsonencode({ Version = "2012-10-17", Statement = [
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
-      { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:DescribeImages", "ecr:DescribeRepositories", "ecr:DescribeImageScanFindings"], Resource = ["arn:aws:ecr:sa-east-1:123456789012:repository/chico-api", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-workers"] },
+      { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:DescribeImages", "ecr:DescribeRepositories", "ecr:DescribeImageScanFindings"], Resource = ["arn:aws:ecr:sa-east-1:123456789012:repository/chico-api", "arn:aws:ecr:sa-east-1:123456789012:repository/chico-workers"] },
       { Effect = "Allow", Action = ["ecr:GetRegistryScanningConfiguration"], Resource = "*" }
     ] }))
     error_message = "Só push/leitura em chico-api e chico-workers; frontend, state, SSM e ECS ficam fora."
