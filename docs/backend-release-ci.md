@@ -52,3 +52,12 @@ ci-build-frontend-dev = {
   environment = "release-dev", writable_state = false, state_access = false
 }
 ```
+
+## Adoção dos recursos criados à mão (2026-11-26)
+
+Os 6 recursos (2 roles, 2 policies, 2 attachments) foram criados pela API antes
+do apply do Shared, iguais ao código. `envs/shared/release-ci-imports.tf` tem
+blocos `import` que os adotam no primeiro plan com os opt-ins ligados: o plan
+deve mostrar **6 to import, 0 to add, 0 to change** nesses recursos. Nenhum
+`terraform import` manual é necessário. Numa conta onde eles não existem, usar
+`release_ci_import_existing = false`.
