@@ -18,10 +18,19 @@ variable "execution_role_arn" { type = string }
 variable "task_role_arn" { type = string }
 variable "public_subnet_ids" { type = list(string) }
 variable "security_group_id" { type = string }
-variable "blue_target_group_arn" { type = string }
-variable "green_target_group_arn" { type = string }
-variable "production_rule_arn" { type = string }
-variable "test_rule_arn" { type = string }
+variable "load_balancers" {
+  description = "Uma entrada por rota do ALB (output load_balancers do modules/alb): par azul/verde e regras de produção/teste. O ECS troca as cores de todas no mesmo deploy."
+  type = list(object({
+    blue_target_group_arn  = string
+    green_target_group_arn = string
+    production_rule_arn    = string
+    test_rule_arn          = string
+  }))
+  validation {
+    condition     = length(var.load_balancers) >= 1 && length(var.load_balancers) * 2 <= 5
+    error_message = "De 1 a 2 rotas: cada rota usa 2 target groups e o ECS aceita no máximo 5 por serviço."
+  }
+}
 variable "alb_management_role_arn" { type = string }
 variable "smoke_hook_arn" { type = string }
 variable "hook_execution_role_arn" { type = string }
@@ -107,21 +116,26 @@ resource "aws_ecs_service" "this" {
     security_groups  = [var.security_group_id]
     assign_public_ip = true
   }
-  load_balancer {
-    container_name   = var.service
-    container_port   = local.port
-    target_group_arn = var.blue_target_group_arn
-    advanced_configuration {
-      alternate_target_group_arn = var.green_target_group_arn
-      production_listener_rule   = var.production_rule_arn
-      test_listener_rule         = var.test_rule_arn
-      role_arn                   = var.alb_management_role_arn
+  dynamic "load_balancer" {
+    for_each = var.load_balancers
+    content {
+      container_name   = var.service
+      container_port   = local.port
+      target_group_arn = load_balancer.value.blue_target_group_arn
+      advanced_configuration {
+        alternate_target_group_arn = load_balancer.value.green_target_group_arn
+        production_listener_rule   = load_balancer.value.production_rule_arn
+        test_listener_rule         = load_balancer.value.test_rule_arn
+        role_arn                   = var.alb_management_role_arn
+      }
     }
   }
   lifecycle {
     precondition {
-      condition     = var.blue_target_group_arn != var.green_target_group_arn && var.production_rule_arn != var.test_rule_arn
-      error_message = "Grupos azul/verde e regras de produção/teste devem ser distintos."
+      condition = alltrue([for lb in var.load_balancers : lb.blue_target_group_arn != lb.green_target_group_arn && lb.production_rule_arn != lb.test_rule_arn]) && (
+        length(distinct(flatten([for lb in var.load_balancers : [lb.blue_target_group_arn, lb.green_target_group_arn]]))) == 2 * length(var.load_balancers)
+      )
+      error_message = "Grupos azul/verde e regras de produção/teste devem ser distintos, e nenhuma rota pode repetir target group de outra."
     }
   }
 }

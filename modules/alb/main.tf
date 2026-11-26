@@ -30,11 +30,11 @@ variable "api_host_names" {
   }
 }
 variable "web_host_names" {
-  description = "Hosts do site (frontend)."
+  description = "Hosts do site (frontend). No máximo 2: a regra de /api soma 2 caminhos e o header de teste, e o ALB aceita 5 valores por regra."
   type        = list(string)
   validation {
-    condition     = length(var.web_host_names) > 0
-    error_message = "Informar ao menos um host do site."
+    condition     = length(var.web_host_names) > 0 && length(var.web_host_names) <= 2
+    error_message = "Informar um ou dois hosts do site."
   }
 }
 variable "frontend_health_path" {
@@ -64,20 +64,34 @@ variable "target_5xx_threshold" {
 locals {
   name = "chico-${var.env}"
 
-  # Blue-green nativo do ECS: cada serviço tem dois target groups e duas regras
-  # no listener HTTPS. A de produção recebe o tráfego real; a de teste, só quem
+  # Blue-green nativo do ECS: cada ROTA tem dois target groups e duas regras no
+  # listener HTTPS. A de produção recebe o tráfego real; a de teste, só quem
   # manda o header de teste (o smoke da Lambda). O ECS troca os pesos entre os
-  # target groups dessas regras durante o deploy.
-  services = {
-    api      = { port = 8000, health = "/health/ready", hosts = var.api_host_names, priority = 10 }
-    frontend = { port = 3000, health = var.frontend_health_path, hosts = var.web_host_names, priority = 30 }
+  # target groups das regras de cada rota durante o deploy; um serviço com duas
+  # rotas registra as tasks nos dois pares (ECS aceita até 5 target groups).
+  #
+  # Contrato AWS-003 (o mesmo do nginx da VPS), avaliado nesta ordem:
+  #   host da API                 → api, sem reescrita (API-01.1, apps mobile)
+  #   site /api/contact           → frontend (rota do próprio Next)
+  #   site /api/* e /ws/*         → api, sem o prefixo /api (/api/ws/odds → /ws/odds)
+  #   site, qualquer outro caminho → frontend
+  # A ordem por prioridade é rota mais específica primeiro, e dentro da rota a
+  # pista de teste antes da de produção.
+  routes = {
+    api      = { service = "api", port = 8000, health = "/health/ready", hosts = var.api_host_names, paths = [], rewrite = false, priority = 10 }
+    contact  = { service = "frontend", port = 3000, health = var.frontend_health_path, hosts = var.web_host_names, paths = ["/api/contact"], rewrite = false, priority = 30 }
+    api-site = { service = "api", port = 8000, health = "/health/ready", hosts = var.web_host_names, paths = ["/api/*", "/ws/*"], rewrite = true, priority = 50 }
+    frontend = { service = "frontend", port = 3000, health = var.frontend_health_path, hosts = var.web_host_names, paths = [], rewrite = false, priority = 70 }
   }
-  colors = ["blue", "green"]
+  # Sempre casa: /api/x vira /x e /ws/x fica como está.
+  site_rewrite = { regex = "^(/api)?(/.*)$", replace = "$2" }
+  colors       = ["blue", "green"]
   target_groups = merge([
-    for service, cfg in local.services : {
-      for color in local.colors : "${service}-${color}" => merge(cfg, { service = service, color = color })
+    for route, cfg in local.routes : {
+      for color in local.colors : "${route}-${color}" => merge(cfg, { route = route, color = color })
     }
   ]...)
+  service_routes = { for service in distinct([for cfg in values(local.routes) : cfg.service]) : service => sort([for route, cfg in local.routes : route if cfg.service == service]) }
   test_header = "x-chico-deploy-test"
 }
 
@@ -154,7 +168,7 @@ resource "aws_lb_target_group" "this" {
 # de criada, porque é o ECS que troca os pesos azul/verde; sem o ignore, o
 # próximo apply desfaria a troca no meio de um deploy.
 resource "aws_lb_listener_rule" "test" {
-  for_each     = local.services
+  for_each     = local.routes
   listener_arn = aws_lb_listener.https.arn
   priority     = each.value.priority
   action {
@@ -164,6 +178,26 @@ resource "aws_lb_listener_rule" "test" {
   condition {
     host_header {
       values = each.value.hosts
+    }
+  }
+  dynamic "condition" {
+    for_each = length(each.value.paths) > 0 ? [each.value.paths] : []
+    content {
+      path_pattern {
+        values = condition.value
+      }
+    }
+  }
+  dynamic "transform" {
+    for_each = each.value.rewrite ? [local.site_rewrite] : []
+    content {
+      type = "url-rewrite"
+      url_rewrite_config {
+        rewrite {
+          regex   = transform.value.regex
+          replace = transform.value.replace
+        }
+      }
     }
   }
   condition {
@@ -178,7 +212,7 @@ resource "aws_lb_listener_rule" "test" {
 }
 
 resource "aws_lb_listener_rule" "production" {
-  for_each     = local.services
+  for_each     = local.routes
   listener_arn = aws_lb_listener.https.arn
   priority     = each.value.priority + 10
   action {
@@ -188,6 +222,26 @@ resource "aws_lb_listener_rule" "production" {
   condition {
     host_header {
       values = each.value.hosts
+    }
+  }
+  dynamic "condition" {
+    for_each = length(each.value.paths) > 0 ? [each.value.paths] : []
+    content {
+      path_pattern {
+        values = condition.value
+      }
+    }
+  }
+  dynamic "transform" {
+    for_each = each.value.rewrite ? [local.site_rewrite] : []
+    content {
+      type = "url-rewrite"
+      url_rewrite_config {
+        rewrite {
+          regex   = transform.value.regex
+          replace = transform.value.replace
+        }
+      }
     }
   }
   lifecycle {
@@ -236,10 +290,20 @@ output "alb_dns_name" { value = aws_lb.this.dns_name }
 output "alb_zone_id" { value = aws_lb.this.zone_id }
 output "test_header" { value = local.test_header }
 output "target_group_arns" {
-  value = { for service in keys(local.services) : service => { for color in local.colors : color => aws_lb_target_group.this["${service}-${color}"].arn } }
+  value = { for route in keys(local.routes) : route => { for color in local.colors : color => aws_lb_target_group.this["${route}-${color}"].arn } }
 }
-output "production_rule_arns" { value = { for service, rule in aws_lb_listener_rule.production : service => rule.arn } }
-output "test_rule_arns" { value = { for service, rule in aws_lb_listener_rule.test : service => rule.arn } }
+output "production_rule_arns" { value = { for route, rule in aws_lb_listener_rule.production : route => rule.arn } }
+output "test_rule_arns" { value = { for route, rule in aws_lb_listener_rule.test : route => rule.arn } }
 output "alarm_names" {
-  value = { for service in keys(local.services) : service => sort(concat([for key, alarm in aws_cloudwatch_metric_alarm.unhealthy : alarm.alarm_name if local.target_groups[key].service == service], [for key, alarm in aws_cloudwatch_metric_alarm.target_5xx : alarm.alarm_name if local.target_groups[key].service == service])) }
+  value = { for service in keys(local.service_routes) : service => sort(concat([for key, alarm in aws_cloudwatch_metric_alarm.unhealthy : alarm.alarm_name if local.target_groups[key].service == service], [for key, alarm in aws_cloudwatch_metric_alarm.target_5xx : alarm.alarm_name if local.target_groups[key].service == service])) }
+}
+output "service_routes" { value = local.service_routes }
+# Por serviço, um bloco load_balancer do modules/web-service por rota.
+output "load_balancers" {
+  value = { for service, routes in local.service_routes : service => [for route in routes : {
+    blue_target_group_arn  = aws_lb_target_group.this["${route}-blue"].arn
+    green_target_group_arn = aws_lb_target_group.this["${route}-green"].arn
+    production_rule_arn    = aws_lb_listener_rule.production[route].arn
+    test_rule_arn          = aws_lb_listener_rule.test[route].arn
+  }] }
 }
