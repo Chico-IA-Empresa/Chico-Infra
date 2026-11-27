@@ -82,10 +82,14 @@ resource "aws_cloudwatch_event_rule" "task_failed" {
 
 # O tópico precisa permitir `sns:Publish` para events.amazonaws.com (e a chave
 # KMS dele, se houver) — a política é de quem é dono do tópico (MON-01).
+#
+# A chave é a posição na lista, não o ARN: no primeiro apply de UAT o tópico
+# vem do foundation.tf no mesmo plan e o ARN só existe depois do apply, e
+# `for_each` não aceita chave desconhecida. O tamanho da lista é conhecido.
 resource "aws_cloudwatch_event_target" "task_failed" {
-  for_each  = toset(var.alarm_topic_arns)
+  for_each  = { for index, arn in var.alarm_topic_arns : tostring(index) => arn }
   rule      = aws_cloudwatch_event_rule.task_failed.name
-  target_id = "sns-${substr(sha1(each.value), 0, 8)}"
+  target_id = "sns-${each.key}"
   arn       = each.value
   input_transformer {
     input_paths = {
@@ -98,4 +102,5 @@ resource "aws_cloudwatch_event_target" "task_failed" {
   }
 }
 
+output "task_failed_target_keys" { value = sort(keys(aws_cloudwatch_event_target.task_failed)) }
 output "alarm_names" { value = sort([for alarm in aws_cloudwatch_metric_alarm.signal : alarm.alarm_name]) }
