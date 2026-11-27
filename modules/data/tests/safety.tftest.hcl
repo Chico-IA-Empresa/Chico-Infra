@@ -43,3 +43,24 @@ run "prod_protected_baseline" {
     error_message = "Sessão ociosa no meio de transação cai em 5 min, não no default de 24 h do RDS."
   }
 }
+run "uat_empty_database_starts_without_snapshot" {
+  command = plan
+  variables {
+    uat_empty_database     = true
+    sanitized_snapshot_arn = null
+  }
+  assert {
+    condition     = aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 0
+    error_message = "UAT vazio passa a precondition sem snapshot e continua descartável."
+  }
+}
+run "uat_empty_database_refuses_a_snapshot_too" {
+  command = plan
+  variables { uat_empty_database = true }
+  expect_failures = [aws_db_instance.this]
+}
+run "uat_without_either_is_refused" {
+  command = plan
+  variables { sanitized_snapshot_arn = null }
+  expect_failures = [aws_db_instance.this]
+}
