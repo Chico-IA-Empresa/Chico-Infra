@@ -57,3 +57,7 @@ output "secrets_key_arn" {
   description = "CMK de segredos efetiva: a explícita ou a desta pilha. O modules/configuration do root usa a mesma."
   value       = local.env_secrets_key_arn
 }
+output "alarm_topic_arns" {
+  description = "Tópico de alerta da pilha (vazio sem foundation_enabled). Os alarmes de dados do root (modules/data) publicam nele."
+  value       = local.env_alarm_topics
+}

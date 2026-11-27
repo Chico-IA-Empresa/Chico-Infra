@@ -68,3 +68,20 @@ run "network_reaches_api_and_workers" {
     error_message = "Com provision_enabled, a borda é planejada; sem foundation_enabled, nenhuma CMK."
   }
 }
+run "data_alarms_planned_with_the_database" {
+  command = plan
+  variables {
+    provision_enabled         = true
+    foundation_enabled        = true
+    rds_enabled               = true
+    cache_enabled             = false
+    credit_approval           = { account_id = "123456789012", evidence_reference = "test-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
+    postgres_version          = "16.4"
+    data_key_arn              = "arn:aws:kms:sa-east-1:123456789012:key/test-only"
+    final_snapshot_identifier = "test-only-final"
+  }
+  assert {
+    condition     = length(module.data[0].alarm_names) == 7 && alltrue([for name in module.data[0].alarm_names : startswith(name, "chico-prod-rds-")])
+    error_message = "O banco do root nasce com os sete alarmes no namespace do ambiente, publicando no tópico da pilha."
+  }
+}
