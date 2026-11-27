@@ -51,16 +51,15 @@ run "workers_wired_but_nothing_runs" {
 run "foundation_and_workers_plan_together" {
   command = plan
   variables {
-    provision_enabled  = true
+    enabled            = true
     foundation_enabled = true
     workers_enabled    = true
-    credit_approval    = { account_id = "123456789012", evidence_reference = "test-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
     workers_image      = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     workers_ami_id     = "ami-0123456789abcdef0"
   }
   assert {
     condition     = length(module.workers[0].task_failed_target_keys) == 1
-    error_message = "No primeiro apply o ARN do tópico de UAT ainda não existe; o destino da regra precisa de chave conhecida no plan."
+    error_message = "No primeiro apply o ARN do tópico do ambiente ainda não existe; o destino da regra precisa de chave conhecida no plan."
   }
 }
 run "reject_unknown_worker_service_count" {
