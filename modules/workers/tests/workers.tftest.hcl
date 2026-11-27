@@ -128,7 +128,7 @@ run "reject_wrong_ami" {
 run "job_failures_reach_the_alarms" {
   command = plan
   assert {
-    condition     = length(aws_cloudwatch_log_metric_filter.signal) == 3 && strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "JOB_RESULT") && strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "\"status\": \"error\"")
+    condition     = length(aws_cloudwatch_log_metric_filter.signal) == 3 && strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "JOB_RESULT") && aws_cloudwatch_log_metric_filter.signal["job-error"].pattern == "%JOB_RESULT .*.status.: .error.%" && !strcontains(aws_cloudwatch_log_metric_filter.signal["job-error"].pattern, "\"")
     error_message = "Filtro casa a linha JOB_RESULT com status error, como o Chico-Back imprime."
   }
   assert {

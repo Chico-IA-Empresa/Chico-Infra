@@ -22,11 +22,14 @@ locals {
 
   # Linhas do Chico-Back: `JOB_RESULT {...}` (workers/one_shot.py) e
   # `LEADER_EVENT {...}` (workers/leader.py), com json.dumps padrão (": ").
-  # O prefixo de texto impede filtro JSON; o regex casa a frase exata.
+  # O prefixo de texto impede filtro JSON; o regex casa a frase exata. O
+  # CloudWatch recusa `"` dentro de %...% ("Invalid character(s) in term"), então
+  # cada aspa vira `.`; conferido com `aws logs test-metric-filter` contra
+  # linhas reais (casa só error/partial/config_error).
   log_signals = {
-    job-error    = { pattern = "%JOB_RESULT .*\"status\": \"error\"%", metric = "JobErrors", period = 300, threshold = 1, description = "Job agendado saiu com erro (JOB_RESULT status error): provedor fora, trava perdida, dado velho ou configuração." }
-    job-partial  = { pattern = "%JOB_RESULT .*\"status\": \"partial\"%", metric = "JobPartial", period = 3600, threshold = var.partial_alarm_threshold, description = "Execuções parciais repetidas: parte dos itens falha a cada disparo (W6)." }
-    config-error = { pattern = "%LEADER_EVENT .*\"event\": \"config_error\"%", metric = "ConfigErrors", period = 300, threshold = 1, description = "Worker contínuo habilitado recusou subir por configuração inválida (WORK-01a)." }
+    job-error    = { pattern = "%JOB_RESULT .*.status.: .error.%", metric = "JobErrors", period = 300, threshold = 1, description = "Job agendado saiu com erro (JOB_RESULT status error): provedor fora, trava perdida, dado velho ou configuração." }
+    job-partial  = { pattern = "%JOB_RESULT .*.status.: .partial.%", metric = "JobPartial", period = 3600, threshold = var.partial_alarm_threshold, description = "Execuções parciais repetidas: parte dos itens falha a cada disparo (W6)." }
+    config-error = { pattern = "%LEADER_EVENT .*.event.: .config_error.%", metric = "ConfigErrors", period = 300, threshold = 1, description = "Worker contínuo habilitado recusou subir por configuração inválida (WORK-01a)." }
   }
 }
 
