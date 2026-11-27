@@ -50,8 +50,8 @@ run "uat_empty_database_starts_without_snapshot" {
     sanitized_snapshot_arn = null
   }
   assert {
-    condition     = aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 0
-    error_message = "UAT vazio passa a precondition sem snapshot e continua descartável."
+    condition     = aws_db_instance.this[0].skip_final_snapshot && aws_db_instance.this[0].backup_retention_period == 0 && aws_db_instance.this[0].username == "chico_owner" && aws_db_instance.this[0].manage_master_user_password
+    error_message = "UAT vazio passa a precondition sem snapshot, cria o usuário mestre com senha gerenciada e continua descartável."
   }
 }
 run "uat_empty_database_refuses_a_snapshot_too" {

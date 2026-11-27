@@ -156,7 +156,7 @@ resource "aws_db_instance" "this" {
   multi_az                              = false
   parameter_group_name                  = aws_db_parameter_group.this[0].name
   snapshot_identifier                   = var.env == "uat" && !var.uat_empty_database ? var.sanitized_snapshot_arn : null
-  username                              = var.env == "prod" ? "chico_owner" : null
+  username                              = var.env == "prod" || var.uat_empty_database ? "chico_owner" : null
   manage_master_user_password           = true
   master_user_secret_kms_key_id         = var.data_key_arn
   enabled_cloudwatch_logs_exports       = ["postgresql"]
