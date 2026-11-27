@@ -48,6 +48,20 @@ run "workers_wired_but_nothing_runs" {
     error_message = "Onze schedules, ligados às task definitions do modules/workers."
   }
 }
+run "foundation_and_workers_plan_together" {
+  command = plan
+  variables {
+    enabled            = true
+    foundation_enabled = true
+    workers_enabled    = true
+    workers_image      = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    workers_ami_id     = "ami-0123456789abcdef0"
+  }
+  assert {
+    condition     = length(module.workers[0].task_failed_target_keys) == 1
+    error_message = "No primeiro apply o ARN do tópico do ambiente ainda não existe; o destino da regra precisa de chave conhecida no plan."
+  }
+}
 run "reject_unknown_worker_service_count" {
   command = plan
   variables { workers_service_desired_counts = { odds-api = 1 } }
