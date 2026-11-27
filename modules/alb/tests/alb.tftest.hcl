@@ -30,7 +30,7 @@ run "blue_green_target_groups" {
     error_message = "Azul e verde para as quatro rotas (api, api-site, contact, frontend), alvos IP (Fargate) e drenagem de 30 s (API-02)."
   }
   assert {
-    condition     = aws_lb_target_group.this["api-blue"].health_check[0].path == "/health/ready" && aws_lb_target_group.this["api-green"].port == 8000 && aws_lb_target_group.this["frontend-blue"].port == 3000
+    condition     = aws_lb_target_group.this["api-blue"].health_check[0].path == "/health/ready" && aws_lb_target_group.this["api-green"].port == 8000 && aws_lb_target_group.this["frontend-blue"].port == 3000 && aws_lb_target_group.this["frontend-blue"].health_check[0].path == "/robots.txt" && aws_lb_target_group.this["contact-green"].health_check[0].path == "/robots.txt"
     error_message = "API pelo /health/ready (só Postgres reprova) na 8000; frontend na 3000."
   }
 }

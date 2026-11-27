@@ -38,8 +38,9 @@ variable "web_host_names" {
   }
 }
 variable "frontend_health_path" {
-  type    = string
-  default = "/"
+  description = "Caminho do health check do frontend. `/` do Next redireciona (307) para /inicio, e o target group só aceita 200; /robots.txt é gerado pelo app e responde 200."
+  type        = string
+  default     = "/robots.txt"
 }
 variable "idle_timeout_seconds" {
   description = "Acima do ping de 20 s do /ws/odds e do heartbeat de 15 s do SSE (API-01), com folga."
