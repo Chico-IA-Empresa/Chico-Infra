@@ -52,25 +52,37 @@ variable "final_snapshot_identifier" {
   type    = string
   default = null
 }
+variable "data_alarm_topic_arns" {
+  description = "Tópicos extras para os alarmes de banco e cache; o tópico da pilha (foundation_enabled) entra sempre."
+  type        = list(string)
+  default     = []
+}
+variable "connections_alarm_threshold" {
+  description = "Null = ~75% do max_connections padrão da classe (modules/data/alarms.tf)."
+  type        = number
+  default     = null
+}
 module "data" {
-  count                     = var.provision_enabled && (local.rds_enabled || local.cache_enabled) ? 1 : 0
-  source                    = "../../modules/data"
-  rds_enabled               = local.rds_enabled
-  cache_enabled             = local.cache_enabled
-  database_name             = var.database_name
-  allocated_storage_gib     = var.allocated_storage_gib
-  max_allocated_storage_gib = var.max_allocated_storage_gib
-  env                       = "prod"
-  account_id                = var.account_id
-  subnet_ids                = module.network[0].data_subnet_ids
-  rds_sg_id                 = module.network[0].security_group_ids["rds"]
-  cache_sg_id               = module.network[0].security_group_ids["cache"]
-  availability_zone         = module.network[0].worker_rds_az
-  postgres_version          = var.postgres_version
-  valkey_version            = var.valkey_version
-  data_key_arn              = local.effective_data_key_arn
-  cache_user_group_ids      = var.cache_user_group_ids
-  sanitized_snapshot_arn    = var.sanitized_snapshot_arn
-  final_snapshot_identifier = var.final_snapshot_identifier
-  depends_on                = [module.funding]
+  count                       = var.provision_enabled && (local.rds_enabled || local.cache_enabled) ? 1 : 0
+  source                      = "../../modules/data"
+  rds_enabled                 = local.rds_enabled
+  cache_enabled               = local.cache_enabled
+  database_name               = var.database_name
+  allocated_storage_gib       = var.allocated_storage_gib
+  max_allocated_storage_gib   = var.max_allocated_storage_gib
+  env                         = "prod"
+  account_id                  = var.account_id
+  subnet_ids                  = module.network[0].data_subnet_ids
+  rds_sg_id                   = module.network[0].security_group_ids["rds"]
+  cache_sg_id                 = module.network[0].security_group_ids["cache"]
+  availability_zone           = module.network[0].worker_rds_az
+  postgres_version            = var.postgres_version
+  valkey_version              = var.valkey_version
+  data_key_arn                = local.effective_data_key_arn
+  cache_user_group_ids        = var.cache_user_group_ids
+  sanitized_snapshot_arn      = var.sanitized_snapshot_arn
+  final_snapshot_identifier   = var.final_snapshot_identifier
+  alarm_topic_arns            = concat(var.data_alarm_topic_arns, module.app_stack.alarm_topic_arns)
+  connections_alarm_threshold = var.connections_alarm_threshold
+  depends_on                  = [module.funding]
 }

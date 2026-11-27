@@ -138,7 +138,7 @@ resource "aws_db_instance" "this" {
   engine                                = "postgres"
   db_name                               = var.database_name
   engine_version                        = var.postgres_version
-  instance_class                        = var.env == "prod" ? "db.t4g.medium" : "db.t4g.small"
+  instance_class                        = local.instance_class
   allocated_storage                     = var.allocated_storage_gib
   max_allocated_storage                 = var.max_allocated_storage_gib
   storage_type                          = "gp3"
