@@ -2,10 +2,11 @@ mock_provider "aws" {
   mock_data "aws_ami" { defaults = { architecture = "arm64", state = "available", name = "al2023-ami-ecs-hvm-2023.0.20251101-kernel-6.1-arm64" } }
 }
 variables {
-  account_id  = "123456789012"
-  owner       = "local-fixture"
-  cost_center = "local-fixture"
-  az_names    = ["sa-east-1a", "sa-east-1b"]
+  env                = "uat"
+  account_id         = "123456789012"
+  vpc_id             = "vpc-0123456789abcdef0"
+  public_subnet_ids  = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+  security_group_ids = { alb = "sg-0000000000000000a", api = "sg-0000000000000000b", frontend = "sg-0000000000000000c", workers = "sg-0000000000000000d", jobs = "sg-0000000000000000e" }
 }
 run "api_off_by_default" {
   command = plan
@@ -25,9 +26,8 @@ run "api_flag_alone_creates_nothing" {
 run "api_and_frontend_wired_behind_the_alb" {
   command = plan
   variables {
-    provision_enabled   = true
+    enabled             = true
     api_enabled         = true
-    credit_approval     = { account_id = "123456789012", evidence_reference = "test-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
     api_certificate_arn = "arn:aws:acm:sa-east-1:123456789012:certificate/test-only"
     api_host_names      = ["api.uat.example.com"]
     web_host_names      = ["uat.example.com"]

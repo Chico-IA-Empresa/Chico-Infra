@@ -1,4 +1,4 @@
-# Chaves para LIGAR a UAT, todas em zero por padrão. Antes ficavam fora do
+# Chaves para LIGAR o ambiente, todas em zero por padrão. Antes ficavam fora do
 # root de propósito; agora existem para o ensaio, mas só mudam com um apply
 # revisado. Subir pelo console não serve: o próximo apply volta ao valor daqui.
 variable "api_desired_counts" {
@@ -25,7 +25,7 @@ variable "workers_schedules_enabled" {
   default     = false
 }
 variable "workers_application_proofs_approved" {
-  description = "Declaração de que one-shot/trava/saída/heartbeat foram provados nesta UAT (precondition do modules/schedules)."
+  description = "Declaração de que one-shot/trava/saída/heartbeat foram provados neste ambiente (precondition do modules/schedules)."
   type        = bool
   default     = false
 }

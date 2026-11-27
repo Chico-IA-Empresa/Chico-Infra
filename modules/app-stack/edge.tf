@@ -1,7 +1,7 @@
-# ENT-03 — certificado e WAF da API de UAT. Tudo desligado por padrão;
+# ENT-03 — certificado e WAF da API do ambiente. Tudo desligado por padrão;
 # cada efeito externo tem sua flag (ver modules/edge/main.tf).
 variable "edge_domain_names" {
-  description = "Nomes do certificado de UAT (ex.: api-uat.chicoia.com.br). Vazio mantém o certificado desligado."
+  description = "Nomes do certificado (ex.: api-uat.chicoia.com.br). Vazio mantém o certificado desligado."
   type        = list(string)
   default     = []
 }
@@ -27,12 +27,12 @@ variable "edge_waf_mode" {
   default = "count"
 }
 variable "edge_logs_key_arn" {
-  description = "Null usa a CMK de logs de UAT (foundation.tf) quando ela existe."
+  description = "Null usa a CMK de logs do ambiente (foundation.tf) quando ela existe."
   type        = string
   default     = null
 }
 variable "edge_alb_arn" {
-  description = "ARN do ALB de UAT. Null usa o ALB do api.tf quando ele existe; a associação continua exigindo edge_association_approved."
+  description = "ARN do ALB do ambiente. Null usa o ALB do api.tf quando ele existe; a associação continua exigindo edge_association_approved."
   type        = string
   default     = null
 }
@@ -42,23 +42,22 @@ variable "edge_association_approved" {
 }
 
 module "edge" {
-  count                = var.provision_enabled ? 1 : 0
-  source               = "../../modules/edge"
-  env                  = "uat"
+  count                = var.enabled ? 1 : 0
+  source               = "../edge"
+  env                  = var.env
   domain_names         = var.edge_domain_names
   certificate_enabled  = var.edge_certificate_enabled
   dns_zone_id          = var.edge_dns_zone_id
   dns_change_approved  = var.edge_dns_change_approved
   waf_enabled          = var.edge_waf_enabled
   waf_mode             = var.edge_waf_mode
-  logs_key_arn         = var.edge_logs_key_arn != null ? var.edge_logs_key_arn : local.uat_logs_key_arn
+  logs_key_arn         = var.edge_logs_key_arn != null ? var.edge_logs_key_arn : local.env_logs_key_arn
   alb_arn              = var.edge_alb_arn != null ? var.edge_alb_arn : try(module.alb[0].alb_arn, null)
   association_approved = var.edge_association_approved
-  depends_on           = [module.funding]
 }
 
 output "edge" {
-  value = var.provision_enabled ? {
+  value = var.enabled ? {
     certificate_arn                = module.edge[0].certificate_arn
     certificate_validation_records = module.edge[0].certificate_validation_records
     web_acl_arn                    = module.edge[0].web_acl_arn

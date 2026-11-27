@@ -1,3 +1,6 @@
+locals {
+  app_env = "prod"
+}
 variable "az_names" { type = list(string) }
 variable "secrets_key_arn" {
   type    = string
@@ -23,7 +26,7 @@ module "configuration" {
   source          = "../../modules/configuration"
   env             = "prod"
   secret_names    = var.secret_names
-  secrets_key_arn = var.secrets_key_arn
+  secrets_key_arn = module.app_stack.secrets_key_arn
   parameters      = var.parameters
   depends_on      = [module.funding]
 }

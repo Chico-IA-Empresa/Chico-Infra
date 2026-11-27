@@ -1,22 +1,20 @@
+# O modules/configuration fica no root; aqui ele entra como o mapa que devolve
+# (nome revisado → ARN), em config_secret_arns.
 mock_provider "aws" {
-  override_during = plan
   mock_data "aws_ami" { defaults = { architecture = "arm64", state = "available", name = "al2023-ami-ecs-hvm-2023.0.20251101-kernel-6.1-arm64" } }
-  mock_resource "aws_secretsmanager_secret" {
-    defaults = { arn = "arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/uat/workers/DATABASE_URL-AbCdEf" }
-  }
 }
 variables {
-  account_id        = "123456789012"
-  owner             = "local-fixture"
-  cost_center       = "local-fixture"
-  az_names          = ["sa-east-1a", "sa-east-1b"]
-  provision_enabled = true
-  workers_enabled   = true
-  credit_approval   = { account_id = "123456789012", evidence_reference = "test-only", reviewed_on = "2026-01-01", expires_on = "2099-01-01", all_charges_covered = true, shutdown_reserve_confirmed = true }
-  workers_image     = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  workers_ami_id    = "ami-0123456789abcdef0"
-  secret_names      = ["workers/DATABASE_URL"]
-  secrets_key_arn   = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111"
+  env                = "uat"
+  account_id         = "123456789012"
+  vpc_id             = "vpc-0123456789abcdef0"
+  public_subnet_ids  = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+  security_group_ids = { alb = "sg-0000000000000000a", api = "sg-0000000000000000b", frontend = "sg-0000000000000000c", workers = "sg-0000000000000000d", jobs = "sg-0000000000000000e" }
+  enabled            = true
+  workers_enabled    = true
+  workers_image      = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/chico-workers@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  workers_ami_id     = "ami-0123456789abcdef0"
+  config_secret_arns = { "workers/DATABASE_URL" = "arn:aws:secretsmanager:sa-east-1:123456789012:secret:/chico/uat/workers/DATABASE_URL-AbCdEf" }
+  secrets_key_arn    = "arn:aws:kms:sa-east-1:123456789012:key/11111111-1111-1111-1111-111111111111"
 }
 
 run "no_references_no_secret_grant" {

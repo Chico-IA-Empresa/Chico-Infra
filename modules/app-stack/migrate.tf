@@ -1,4 +1,4 @@
-# Migration do banco de UAT: o mesmo comando do serviço `migrate` da VPS
+# Migration do banco do ambiente: o mesmo comando do serviço `migrate` da VPS
 # (deploy/docker-compose.runtime.yml do Chico-Back), na imagem da API.
 # O Terraform só DEFINE a task; rodar é um passo explícito antes de subir a
 # API (output migrate_run_task), porque migration não pode rodar sozinha a
@@ -19,7 +19,7 @@ locals {
 
 resource "aws_ecs_task_definition" "migrate" {
   count                    = local.migrate_on ? 1 : 0
-  family                   = "chico-uat-migrate"
+  family                   = "chico-${var.env}-migrate"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = "256"
@@ -36,19 +36,19 @@ resource "aws_ecs_task_definition" "migrate" {
     secrets     = lookup(local.api_secrets_resolved, "migrate", lookup(local.api_secrets_resolved, "api", [])),
     environment = lookup(var.api_environment, "api", []),
     logConfiguration = { logDriver = "awslogs", options = {
-      "awslogs-group"  = "/chico/uat/api",
+      "awslogs-group"  = "/chico/${var.env}/api",
       "awslogs-region" = "sa-east-1", "awslogs-stream-prefix" = "migrate"
     } }
   }])
-  # O log group /chico/uat/api nasce no web-service da API.
+  # O log group /chico/${var.env}/api nasce no web-service da API.
   depends_on = [module.web]
 }
 
 output "migrate_run_task" {
-  description = "Rodar antes de subir a API (e a cada release com migration); conferir o código de saída 0 no log /chico/uat/api, prefixo migrate."
+  description = "Rodar antes de subir a API (e a cada release com migration); conferir o código de saída 0 no log /chico/<env>/api, prefixo migrate."
   value = local.migrate_on ? join(" ", [
-    "aws ecs run-task --cluster chico-uat-web --launch-type FARGATE",
+    "aws ecs run-task --cluster chico-${var.env}-web --launch-type FARGATE",
     "--task-definition ${aws_ecs_task_definition.migrate[0].arn}",
-    "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", module.network[0].public_subnet_ids)}],securityGroups=[${module.network[0].security_group_ids["api"]}],assignPublicIp=ENABLED}'",
+    "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", var.public_subnet_ids)}],securityGroups=[${var.security_group_ids["api"]}],assignPublicIp=ENABLED}'",
   ]) : null
 }
