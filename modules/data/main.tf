@@ -50,6 +50,11 @@ variable "cache_sg_id" {
   default = null
 }
 variable "availability_zone" { type = string }
+variable "uat_empty_database" {
+  description = "UAT sem snapshot: banco novo e vazio, criado pelas migrations. Exclui sanitized_snapshot_arn; nenhum dado de Prod, nem anonimizado."
+  type        = bool
+  default     = false
+}
 variable "postgres_version" {
   type    = string
   default = null
@@ -150,7 +155,7 @@ resource "aws_db_instance" "this" {
   publicly_accessible                   = false
   multi_az                              = false
   parameter_group_name                  = aws_db_parameter_group.this[0].name
-  snapshot_identifier                   = var.env == "uat" ? var.sanitized_snapshot_arn : null
+  snapshot_identifier                   = var.env == "uat" && !var.uat_empty_database ? var.sanitized_snapshot_arn : null
   username                              = var.env == "prod" ? "chico_owner" : null
   manage_master_user_password           = true
   master_user_secret_kms_key_id         = var.data_key_arn
@@ -172,8 +177,8 @@ resource "aws_db_instance" "this" {
   apply_immediately                     = false
   lifecycle {
     precondition {
-      condition     = var.env != "uat" || try(startswith(var.sanitized_snapshot_arn, "arn:aws:rds:sa-east-1:${var.account_id}:snapshot:uat-sanitized-"), false)
-      error_message = "UAT restaura somente ARN sanitizado aprovado da conta/região. Prefixo não substitui aprovação/KMS/IAM reais."
+      condition     = var.env != "uat" || (var.uat_empty_database ? var.sanitized_snapshot_arn == null : try(startswith(var.sanitized_snapshot_arn, "arn:aws:rds:sa-east-1:${var.account_id}:snapshot:uat-sanitized-"), false))
+      error_message = "UAT nasce vazio (uat_empty_database, sem snapshot) ou restaura somente ARN sanitizado aprovado da conta/região. Prefixo não substitui aprovação/KMS/IAM reais."
     }
     precondition {
       condition     = var.env != "prod" || try(length(var.final_snapshot_identifier) > 0, false)

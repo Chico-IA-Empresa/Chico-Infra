@@ -62,6 +62,43 @@ variable "connections_alarm_threshold" {
   type        = number
   default     = null
 }
+variable "empty_database" {
+  description = "Sobe o RDS de UAT vazio (migrations criam o schema), sem snapshot. Alternativa a sanitized_snapshot_arn."
+  type        = bool
+  default     = false
+}
+
+# Chave dos dados de UAT (RDS, segredo do usuário mestre, log do Postgres),
+# separada da de Prod e das chaves da foundation. data_key_arn explícito vence.
+locals {
+  uat_data_key_on  = var.provision_enabled && local.rds_enabled && var.data_key_arn == null
+  uat_rds_log_arn  = "arn:aws:logs:sa-east-1:${var.account_id}:log-group:/aws/rds/instance/chico-uat/postgresql"
+  uat_data_key_arn = var.data_key_arn != null ? var.data_key_arn : try(aws_kms_key.data[0].arn, null)
+}
+
+resource "aws_kms_key" "data" {
+  count                   = local.uat_data_key_on ? 1 : 0
+  description             = "Chico UAT data (RDS, master secret, Postgres log); managed by uat root"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Sid = "AccountRecoveryAndIAMDelegation", Effect = "Allow", Principal = { AWS = "arn:aws:iam::${var.account_id}:root" }, Action = "kms:*", Resource = "*" },
+    {
+      Sid       = "PostgresLogEncryption", Effect = "Allow", Principal = { Service = "logs.sa-east-1.amazonaws.com" },
+      Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"], Resource = "*",
+      Condition = { ArnEquals = { "kms:EncryptionContext:aws:logs:arn" = local.uat_rds_log_arn } }
+    }
+  ] })
+  tags       = { env = "uat" }
+  depends_on = [module.funding]
+}
+
+resource "aws_kms_alias" "data" {
+  count         = local.uat_data_key_on ? 1 : 0
+  name          = "alias/chico/uat/data"
+  target_key_id = aws_kms_key.data[0].key_id
+}
+
 module "data" {
   count                       = var.provision_enabled && (local.rds_enabled || local.cache_enabled) ? 1 : 0
   source                      = "../../modules/data"
@@ -78,7 +115,8 @@ module "data" {
   availability_zone           = module.network[0].worker_rds_az
   postgres_version            = var.postgres_version
   valkey_version              = var.valkey_version
-  data_key_arn                = var.data_key_arn
+  data_key_arn                = local.uat_data_key_arn
+  uat_empty_database          = var.empty_database
   cache_user_group_ids        = var.cache_user_group_ids
   sanitized_snapshot_arn      = var.sanitized_snapshot_arn
   final_snapshot_identifier   = var.final_snapshot_identifier
